@@ -6,5 +6,6 @@
     "workbench.preferredDarkColorTheme": "Visual Studio Dark",
     "files.exclude": {
         "**/.ruby-lsp": false
-    }
+    },
+    "snyk.advanced.organization": "d30f654a-b0ec-42cb-90f3-2c494821dc4b"
 }
