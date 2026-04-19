@@ -5,7 +5,7 @@ import { usePaperTradeStore } from '../stores/paperTradeStore';
 import { usePriceStore } from '../stores/priceStore';
 import { useKalshiStore } from '../stores/kalshiStore';
 import { useSignalStore } from '../stores/signalStore';
-import type { Trade } from '../types';
+import type { PaperTrade } from '../stores/paperTradeStore';
 
 interface TradeConfirmationModalProps {
   readonly pendingDirection: 'UP' | 'DOWN' | null;
@@ -69,7 +69,7 @@ function TradeConfirmationModal({ pendingDirection, recommendedBet, edge, spotPr
 }
 
 interface ActiveTradeDisplayProps {
-  readonly activeTrade: Trade;
+  readonly activeTrade: PaperTrade;
   readonly onClose: () => void;
 }
 
@@ -183,7 +183,7 @@ function PerformanceStats({ totalTrades, winRate, profitFactor, maxDrawdown }: P
 }
 
 interface RecentTradesListProps {
-  readonly trades: Trade[];
+  readonly trades: PaperTrade[];
 }
 
 function RecentTradesList({ trades }: RecentTradesListProps) {

@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { TradeDirection } from '../types';
 
-interface PaperTrade {
+export interface PaperTrade {
   id: string;
   timestamp: number;
   direction: TradeDirection;

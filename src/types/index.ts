@@ -39,6 +39,8 @@ export interface TradeRecord {
   pnl: number;
 }
 
+export type Trade = TradeRecord;
+
 export interface KellyResult {
   kellyFraction: number;
   fractionalKelly: number;
