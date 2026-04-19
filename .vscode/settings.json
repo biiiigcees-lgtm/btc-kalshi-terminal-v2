@@ -1,0 +1,10 @@
+{
+    "snyk.advanced.autoSelectOrganization": true,
+    "chatledger.enabled": true,
+    "workbench.colorTheme": "Shades of Purple",
+    "workbench.iconTheme": "vscode-icons",
+    "workbench.preferredDarkColorTheme": "Visual Studio Dark",
+    "files.exclude": {
+        "**/.ruby-lsp": false
+    }
+}

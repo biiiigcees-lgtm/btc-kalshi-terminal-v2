@@ -1,0 +1,217 @@
+/* Component Styles - replaces inline styles */
+
+/* AIAdvisor Styles */
+.ai-advisor-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0d0d12;
+  border: 1px solid #333350;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.ai-advisor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: linear-gradient(90deg, #1a1a2e 0%, #16213e 100%);
+  border-bottom: 1px solid #333350;
+}
+
+.ai-advisor-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #4488ff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ai-advisor-badge {
+  font-size: 9px;
+  color: #00ff88;
+  font-family: monospace;
+}
+
+.ai-advisor-button {
+  padding: 4px 12px;
+  font-size: 11px;
+  font-family: monospace;
+  font-weight: 700;
+  border-radius: 4px;
+  border: 1px solid #4488ff;
+  background: #4488ff;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ai-advisor-button:hover:not(:disabled) {
+  background: #5599ff;
+  border-color: #5599ff;
+}
+
+.ai-advisor-button:disabled {
+  background: #1e1e2e;
+  color: #666680;
+  border-color: #333350;
+  cursor: not-allowed;
+}
+
+.ai-messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-message-system {
+  background: #1a1a2e;
+  border-left: 3px solid #4488ff;
+}
+
+.ai-message-user {
+  background: #1e3a5f;
+  border-left: 3px solid #00ff88;
+  align-self: flex-end;
+  max-width: 85%;
+}
+
+.ai-message-assistant {
+  background: #2a1a3e;
+  border-left: 3px solid #ff6b35;
+  align-self: flex-start;
+  max-width: 90%;
+}
+
+.ai-message {
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: pre-wrap;
+}
+
+.ai-input-container {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid #333350;
+  background: #1a1a2e;
+}
+
+.ai-input {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  background: #0d0d12;
+  border: 1px solid #333350;
+  border-radius: 4px;
+  color: #e0e0e0;
+}
+
+.ai-input::placeholder {
+  color: #666680;
+}
+
+.ai-input:focus {
+  outline: none;
+  border-color: #4488ff;
+}
+
+.ai-send-button {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #333350;
+  border: 1px solid #333350;
+  border-radius: 4px;
+  color: #e0e0e0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ai-send-button:hover:not(:disabled) {
+  background: #4488ff;
+  border-color: #4488ff;
+  color: #fff;
+}
+
+.ai-send-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* CountdownTimer Styles */
+.countdown-container {
+  background: #0d0d12;
+  border: 1px solid #333350;
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.countdown-arc {
+  transition: stroke 0.3s ease;
+}
+
+.countdown-arc-red {
+  stroke: #ff4444;
+}
+
+.countdown-arc-yellow {
+  stroke: #ffaa00;
+}
+
+.countdown-arc-green {
+  stroke: #00ff88;
+}
+
+.countdown-input {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  background: #1a1a2e;
+  border: 1px solid #333350;
+  border-radius: 4px;
+  color: #e0e0e0;
+}
+
+.countdown-input::placeholder {
+  color: #666680;
+}
+
+.countdown-input:focus {
+  outline: none;
+  border-color: #4488ff;
+}
+
+/* GaugeChart Styles */
+.gauge-container {
+  background: #0d0d12;
+  border: 1px solid #333350;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.gauge-value {
+  font-size: 24px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.gauge-label {
+  font-size: 11px;
+  color: #8888a0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
