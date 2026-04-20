@@ -1,4 +1,5 @@
 // /app/api/analyze/route.ts — SERVER ONLY
+// Using Vercel AI SDK with Groq API and Cerebras fallback
 import { NextRequest, NextResponse } from 'next/server';
 import { generateObject } from 'ai';
 import { groq } from '@ai-sdk/groq';
