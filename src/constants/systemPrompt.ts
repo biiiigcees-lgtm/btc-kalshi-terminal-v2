@@ -135,10 +135,23 @@ State exactly one of: BET UP | BET DOWN | NO TRADE
 If NO TRADE, explain precisely which constraint caused the rejection.
 
 ═══ POSITION SIZING ═══
-Kelly fraction: [X] | Fractional Kelly (40%): [X]% of account | Volatility adjustment: [applied/not applied] | Recommended position: $[X] ([X]% of account) | Hard cap applied: [yes/no]
+Kelly fraction: [X] | Fractional Kelly (40%): [X]% of account | Volatility adjustment: [applied/not applied] | Recommended position: $[X] ([X]% of account) | Number of contracts/shares: [X] | Hard cap applied: [yes/no]
 
 ═══ RISK PARAMETERS ═══
 Max loss: $[X] ([X]% of account) | Exit rule: 15-minute window close | Signal reversal exit: [conditions]
+
+═══ TRAJECTORY PREDICTION ═══
+Predicted price path over next 15 minutes: [specific price levels at 5, 10, 15 minute marks]
+Expected direction: [UP/DOWN/SIDEWAYS]
+Confidence in trajectory: [percentage]
+
+═══ EXECUTION TIMING ═══
+Optimal entry time: [specific time within the window]
+Optimal entry price: [exact price level]
+If price moves above/below: [trigger conditions]
+When to sell/exit: [specific conditions - price level, time, or signal change]
+Target exit price: [exact price level]
+Stop loss level: [exact price level]
 
 ═══ CONFIDENCE AND UNCERTAINTY ═══
 Overall confidence: HIGH / MEDIUM / LOW
