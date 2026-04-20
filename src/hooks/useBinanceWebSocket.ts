@@ -28,9 +28,17 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
   async function loadHistory() {
     try {
       const res = await fetch(KRAKEN_OHLC_URL);
+      if (!res.ok) {
+        console.error('Kraken API error:', res.status);
+        return;
+      }
       const json = await res.json();
       // Kraken returns: { result: { XBTUSDT: [[time, open, high, low, close, vwap, volume, count], ...] } }
       const ohlc = json.result?.XBTUSDT || json.result?.XXBTZUSD || [];
+      if (ohlc.length === 0) {
+        console.error('No OHLC data received from Kraken');
+        return;
+      }
       const candles: Candle[] = ohlc.slice(-200).map((k: number[]) => ({
         time: Math.floor(k[0]), // Kraken time is already in seconds
         open: parseFloat(String(k[1])),
@@ -39,6 +47,7 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
         close: parseFloat(String(k[4])),
         volume: parseFloat(String(k[6])),
       }));
+      console.log(`Loaded ${candles.length} candles from Kraken`);
       setCandles(candles);
     } catch (e) {
       console.error('History load failed', e);
