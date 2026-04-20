@@ -60,12 +60,15 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
 
   async function loadHistoryFromBinance() {
     try {
+      console.log('Attempting to load candles from Binance API...');
       const res = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=200');
+      console.log('Binance API response status:', res.status);
       if (!res.ok) {
         console.error('Binance API error:', res.status);
         return;
       }
       const data = await res.json();
+      console.log('Binance API response data length:', Array.isArray(data) ? data.length : 'not an array');
       if (!Array.isArray(data) || data.length === 0) {
         console.error('No data received from Binance');
         return;
