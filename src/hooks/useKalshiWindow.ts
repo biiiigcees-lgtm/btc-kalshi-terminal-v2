@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 
 export function useKalshiWindow() {
-  const [secondsRemaining, setSecondsRemaining] = useState(0);
+  const [secondsRemaining, setSecondsRemaining] = useState(900); // Start at 15 minutes
   const [windowOpenTime, setWindowOpenTime] = useState<Date>(new Date());
 
   useEffect(() => {
