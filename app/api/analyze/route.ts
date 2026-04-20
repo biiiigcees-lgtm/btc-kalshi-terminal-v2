@@ -43,6 +43,11 @@ const SignalSchema = z.object({
   executionTiming: z.string(),
   confidence: z.string(),
   performanceAlerts: z.string(),
+  // Numeric fields for validation
+  kellyFraction: z.number().min(0).max(0.25), // Kelly fraction capped at 25%
+  recommendedBet: z.number().min(0),
+  ensembleProbability: z.number().min(0).max(100),
+  edge: z.number().min(-100).max(100),
 });
 
 // Cerebras as fallback

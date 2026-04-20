@@ -7,5 +7,6 @@
       "path": "/api/cron/btc-signal",
       "schedule": "*/15 * * * *"
     }
-  ]
+  ],
+  "_note": "Cron jobs require Vercel Pro plan. Free tier does not support scheduled cron jobs. Upgrade to Pro at https://vercel.com/pricing to enable cron functionality."
 }
