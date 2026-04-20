@@ -1,5 +1,9 @@
 // /app/api/analyze/route.ts — SERVER ONLY
 import { NextRequest, NextResponse } from 'next/server';
+import { generateObject } from 'ai';
+import { groq } from '@ai-sdk/groq';
+import { createOpenAI } from '@ai-sdk/openai';
+import { z } from 'zod';
 import { SYSTEM_PROMPT } from '../../../src/constants/systemPrompt';
 
 // Simple in-memory rate limiter: 1 request per 10 seconds per IP
@@ -25,6 +29,27 @@ function checkRateLimit(ip: string): boolean {
   return true; // Allowed
 }
 
+// Zod schema for structured output
+const SignalSchema = z.object({
+  marketContext: z.string(),
+  signalAnalysis: z.string(),
+  ensemblePrediction: z.string(),
+  edgeQuantification: z.string(),
+  betRecommendation: z.string(),
+  positionSizing: z.string(),
+  riskParameters: z.string(),
+  trajectoryPrediction: z.string(),
+  executionTiming: z.string(),
+  confidence: z.string(),
+  performanceAlerts: z.string(),
+});
+
+// Cerebras as fallback
+const cerebras = createOpenAI({
+  baseURL: 'https://api.cerebras.ai/v1',
+  apiKey: process.env.GROQ_API_KEY, // Use same key for now
+});
+
 export async function POST(req: NextRequest) {
   // Rate limiting check
   const clientIP = getClientIP(req);
@@ -42,34 +67,80 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'GROQ_API_KEY not configured' }, { status: 500 });
     }
 
-    const response = await fetch(
-      'https://api.groq.com/openai/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'llama-3.1-70b-versatile',
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: marketContext },
-          ],
-          max_tokens: 1500,
-          temperature: 0.2,
-        }),
-      }
-    );
+    let result;
+    let usedFallback = false;
 
-    if (!response.ok) {
-      const err = await response.text();
-      return NextResponse.json({ error: `Groq API error: ${err}` }, { status: response.status });
+    try {
+      // Try Groq first
+      const object = await generateObject({
+        model: groq('llama-3.3-70b-versatile'),
+        schema: SignalSchema,
+        prompt: `${SYSTEM_PROMPT}\n\nMarket Context:\n${marketContext}`,
+        temperature: 0.2,
+      });
+      result = object.object;
+    } catch (groqError: any) {
+      // Fallback to Cerebras on 429 or 503 errors
+      if (groqError?.status === 429 || groqError?.status === 503) {
+        console.log('Groq rate limited, falling back to Cerebras');
+        usedFallback = true;
+        try {
+          const object = await generateObject({
+            model: cerebras('llama-3.3-70b'),
+            schema: SignalSchema,
+            prompt: `${SYSTEM_PROMPT}\n\nMarket Context:\n${marketContext}`,
+            temperature: 0.2,
+          });
+          result = object.object;
+        } catch (cerebrasError: any) {
+          console.error('Cerebras fallback also failed:', cerebrasError);
+          return NextResponse.json({ error: `Both Groq and Cerebras failed: ${cerebrasError.message}` }, { status: 500 });
+        }
+      } else {
+        throw groqError;
+      }
     }
 
-    const data = await response.json();
-    const result = data.choices?.[0]?.message?.content || 'No response from Groq';
-    return NextResponse.json({ result });
+    // Format the structured output into a readable response
+    const formattedResponse = [
+      `═══ MARKET CONTEXT ═══`,
+      result.marketContext,
+      '',
+      `═══ SIGNAL ANALYSIS ═══`,
+      result.signalAnalysis,
+      '',
+      `═══ ENSEMBLE PREDICTION ═══`,
+      result.ensemblePrediction,
+      '',
+      `═══ EDGE QUANTIFICATION ═══`,
+      result.edgeQuantification,
+      '',
+      `═══ BET RECOMMENDATION ═══`,
+      result.betRecommendation,
+      '',
+      `═══ POSITION SIZING ═══`,
+      result.positionSizing,
+      '',
+      `═══ RISK PARAMETERS ═══`,
+      result.riskParameters,
+      '',
+      `═══ TRAJECTORY PREDICTION ═══`,
+      result.trajectoryPrediction,
+      '',
+      `═══ EXECUTION TIMING ═══`,
+      result.executionTiming,
+      '',
+      `═══ CONFIDENCE AND UNCERTAINTY ═══`,
+      result.confidence,
+      '',
+      `═══ PERFORMANCE ALERTS ═══`,
+      result.performanceAlerts,
+    ].join('\n');
+
+    return NextResponse.json({ 
+      result: formattedResponse,
+      usedFallback 
+    });
   } catch (err) {
     console.error('analyze route error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

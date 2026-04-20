@@ -293,6 +293,13 @@ export default function AIAdvisor() {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* Disclaimer */}
+      <div className="px-3 py-2 border-t border-[#1e1e2e]">
+        <div className="text-[9px] font-mono text-[#666680] text-center">
+          AI-generated analysis only. Not financial advice.
+        </div>
+      </div>
     </div>
   );
 }
