@@ -2,9 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SYSTEM_PROMPT } from '../../../src/constants/systemPrompt';
 
-// Simple in-memory rate limiter: 1 request per 30 seconds per IP
+// Simple in-memory rate limiter: 1 request per 10 seconds per IP
 const rateLimiter = new Map<string, number>();
-const RATE_LIMIT_MS = 30000; // 30 seconds
+const RATE_LIMIT_MS = 10000; // 10 seconds
 
 function getClientIP(req: NextRequest): string {
   // Get IP from various headers
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const clientIP = getClientIP(req);
   if (!checkRateLimit(clientIP)) {
     return NextResponse.json(
-      { error: 'Rate limit exceeded. Please wait 30 seconds between analyses.' },
+      { error: 'Rate limit exceeded. Please wait 10 seconds between analyses.' },
       { status: 429 }
     );
   }
@@ -38,41 +38,37 @@ export async function POST(req: NextRequest) {
   try {
     const { marketContext } = await req.json();
 
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
+    if (!process.env.GROQ_API_KEY) {
+      return NextResponse.json({ error: 'GROQ_API_KEY not configured' }, { status: 500 });
     }
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      'https://api.groq.com/openai/v1/chat/completions',
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
         },
         body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: SYSTEM_PROMPT }],
-          },
-          contents: [
-            {
-              parts: [{ text: marketContext }],
-            },
+          model: 'llama-3.1-70b-versatile',
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: marketContext },
           ],
-          generationConfig: {
-            maxOutputTokens: 1500,
-            temperature: 0.2,
-          },
+          max_tokens: 1500,
+          temperature: 0.2,
         }),
       }
     );
 
     if (!response.ok) {
       const err = await response.text();
-      return NextResponse.json({ error: `Gemini API error: ${err}` }, { status: response.status });
+      return NextResponse.json({ error: `Groq API error: ${err}` }, { status: response.status });
     }
 
     const data = await response.json();
-    const result = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response from Gemini';
+    const result = data.choices?.[0]?.message?.content || 'No response from Groq';
     return NextResponse.json({ result });
   } catch (err) {
     console.error('analyze route error:', err);
