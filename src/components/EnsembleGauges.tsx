@@ -1,5 +1,6 @@
 // /src/components/EnsembleGauges.tsx
 'use client';
+import { useEffect } from 'react';
 import GaugeChart from './GaugeChart';
 import { useSignalStore } from '@/stores/signalStore';
 import { useKalshiStore } from '@/stores/kalshiStore';
@@ -34,6 +35,17 @@ function getVolatilityColor(volatility: string): string {
 export default function EnsembleGauges() {
   const { ensembleProbability, regime } = useSignalStore();
   const { expectedValue, edge } = useKalshiStore();
+
+  // Auto-analyze when ensemble probability or edge changes significantly
+  useEffect(() => {
+    if (ensembleProbability > 0) {
+      // Trigger auto-analysis when ensemble probability updates
+      if (typeof globalThis !== 'undefined' && globalThis.window) {
+        const context = `Ensemble analysis updated. Probability: ${ensembleProbability.toFixed(1)}%, Edge: ${edge.toFixed(1)}%, EV: ${expectedValue.toFixed(2)}%. Regime: ${regime.trend} ${regime.volatility}. Directive: ${getDirective(ensembleProbability, expectedValue).text}.`;
+        globalThis.window.dispatchEvent(new CustomEvent('auto-analyze', { detail: context }));
+      }
+    }
+  }, [ensembleProbability, edge, expectedValue, regime]);
 
   const directive = getDirective(ensembleProbability, expectedValue);
 
