@@ -28,6 +28,14 @@ export default function TradeLog() {
   const [filter, setFilter] = useState<'all' | 'win' | 'loss' | 'pending'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualTrade, setManualTrade] = useState({
+    direction: 'UP' as 'UP' | 'DOWN',
+    entryPrice: '',
+    exitPrice: '',
+    shares: '',
+    notes: ''
+  });
 
   function handleLogTrade() {
     const trade: TradeRecord = {
@@ -42,6 +50,33 @@ export default function TradeLog() {
       pnl: 0,
     };
     addTrade(trade);
+  }
+
+  function handleManualTradeEntry() {
+    const entryPrice = parseFloat(manualTrade.entryPrice);
+    const exitPrice = parseFloat(manualTrade.exitPrice);
+    const shares = parseFloat(manualTrade.shares);
+    
+    if (!entryPrice || !shares) {
+      alert('Please enter entry price and shares');
+      return;
+    }
+
+    const trade: TradeRecord = {
+      id: `manual-trade-${Date.now()}`,
+      windowOpen: new Date().toISOString(),
+      direction: manualTrade.direction,
+      predictedPct: manualTrade.direction === 'UP' ? 55 : 45,
+      kalshiPct: 50,
+      edge: manualTrade.direction === 'UP' ? 5 : -5,
+      bet: entryPrice * shares,
+      result: exitPrice ? (manualTrade.direction === 'UP' ? (exitPrice > entryPrice ? 'win' : 'loss') : (exitPrice < entryPrice ? 'win' : 'loss')) : 'pending',
+      pnl: exitPrice ? ((manualTrade.direction === 'UP' ? (exitPrice - entryPrice) : (entryPrice - exitPrice)) * shares) : 0,
+    };
+    
+    addTrade(trade);
+    setManualTrade({ direction: 'UP', entryPrice: '', exitPrice: '', shares: '', notes: '' });
+    setShowManualEntry(false);
   }
 
   function exportTrades(format: 'csv' | 'json') {
@@ -156,14 +191,84 @@ export default function TradeLog() {
         </div>
       </div>
 
-      <div className="px-2 pb-1">
+      <div className="px-2 pb-1 flex gap-2">
         <button
           onClick={handleLogTrade}
-          className="w-full py-1 text-xs font-mono rounded border border-[#1e1e2e] text-[#4488ff] hover:bg-[#4488ff11] transition-colors"
+          className="flex-1 py-1 text-xs font-mono rounded border border-[#1e1e2e] text-[#4488ff] hover:bg-[#4488ff11] transition-colors"
         >
           + LOG THIS TRADE
         </button>
+        <button
+          onClick={() => setShowManualEntry(!showManualEntry)}
+          className="flex-1 py-1 text-xs font-mono rounded border border-[#1e1e2e] text-[#ffaa00] hover:bg-[#ffaa0011] transition-colors"
+        >
+          {showManualEntry ? 'CANCEL' : '+ MANUAL ENTRY'}
+        </button>
       </div>
+
+      {showManualEntry && (
+        <div className="px-2 pb-2 space-y-2 border-b border-[#1e1e2e]">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[9px] font-display text-[#666680] uppercase tracking-widest block mb-1">Direction</label>
+              <select
+                value={manualTrade.direction}
+                onChange={(e) => setManualTrade({...manualTrade, direction: e.target.value as 'UP' | 'DOWN'})}
+                className="w-full bg-[#1e1e2e] text-xs font-mono text-[#e8e8f0] rounded px-2 py-1 border border-[#333350] focus:outline-none focus:border-[#4488ff]"
+              >
+                <option value="UP">UP</option>
+                <option value="DOWN">DOWN</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] font-display text-[#666680] uppercase tracking-widest block mb-1">Entry Price</label>
+              <input
+                type="number"
+                value={manualTrade.entryPrice}
+                onChange={(e) => setManualTrade({...manualTrade, entryPrice: e.target.value})}
+                placeholder="74000"
+                className="w-full bg-[#1e1e2e] text-xs font-mono text-[#e8e8f0] rounded px-2 py-1 border border-[#333350] focus:outline-none focus:border-[#4488ff]"
+              />
+            </div>
+            <div>
+              <label className="text-[9px] font-display text-[#666680] uppercase tracking-widest block mb-1">Exit Price (optional)</label>
+              <input
+                type="number"
+                value={manualTrade.exitPrice}
+                onChange={(e) => setManualTrade({...manualTrade, exitPrice: e.target.value})}
+                placeholder="74500"
+                className="w-full bg-[#1e1e2e] text-xs font-mono text-[#e8e8f0] rounded px-2 py-1 border border-[#333350] focus:outline-none focus:border-[#4488ff]"
+              />
+            </div>
+            <div>
+              <label className="text-[9px] font-display text-[#666680] uppercase tracking-widest block mb-1">Shares/Contracts</label>
+              <input
+                type="number"
+                value={manualTrade.shares}
+                onChange={(e) => setManualTrade({...manualTrade, shares: e.target.value})}
+                placeholder="10"
+                className="w-full bg-[#1e1e2e] text-xs font-mono text-[#e8e8f0] rounded px-2 py-1 border border-[#333350] focus:outline-none focus:border-[#4488ff]"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-[9px] font-display text-[#666680] uppercase tracking-widest block mb-1">Notes (optional)</label>
+            <input
+              type="text"
+              value={manualTrade.notes}
+              onChange={(e) => setManualTrade({...manualTrade, notes: e.target.value})}
+              placeholder="Trade notes..."
+              className="w-full bg-[#1e1e2e] text-xs font-mono text-[#e8e8f0] rounded px-2 py-1 border border-[#333350] focus:outline-none focus:border-[#4488ff]"
+            />
+          </div>
+          <button
+            onClick={handleManualTradeEntry}
+            className="w-full py-1 text-xs font-mono rounded bg-[#ffaa00] text-black font-bold hover:bg-[#ffaa00bb] transition-colors"
+          >
+            SAVE TRADE
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto px-2">
         <table className="w-full text-[10px] font-mono border-collapse">
