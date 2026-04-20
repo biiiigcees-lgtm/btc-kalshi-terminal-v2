@@ -30,13 +30,16 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
       const res = await fetch(KRAKEN_OHLC_URL);
       if (!res.ok) {
         console.error('Kraken API error:', res.status);
+        // Fallback to Binance
+        await loadHistoryFromBinance();
         return;
       }
       const json = await res.json();
       // Kraken returns: { result: { XBTUSDT: [[time, open, high, low, close, vwap, volume, count], ...] } }
       const ohlc = json.result?.XBTUSDT || json.result?.XXBTZUSD || [];
       if (ohlc.length === 0) {
-        console.error('No OHLC data received from Kraken');
+        console.error('No OHLC data received from Kraken, trying Binance...');
+        await loadHistoryFromBinance();
         return;
       }
       const candles: Candle[] = ohlc.slice(-200).map((k: number[]) => ({
@@ -50,7 +53,35 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
       console.log(`Loaded ${candles.length} candles from Kraken`);
       setCandles(candles);
     } catch (e) {
-      console.error('History load failed', e);
+      console.error('Kraken history load failed, trying Binance:', e);
+      await loadHistoryFromBinance();
+    }
+  }
+
+  async function loadHistoryFromBinance() {
+    try {
+      const res = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=200');
+      if (!res.ok) {
+        console.error('Binance API error:', res.status);
+        return;
+      }
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        console.error('No data received from Binance');
+        return;
+      }
+      const candles: Candle[] = data.map((k: any[]) => ({
+        time: Math.floor(k[0] / 1000), // Binance time is in milliseconds
+        open: parseFloat(k[1]),
+        high: parseFloat(k[2]),
+        low: parseFloat(k[3]),
+        close: parseFloat(k[4]),
+        volume: parseFloat(k[5]),
+      }));
+      console.log(`Loaded ${candles.length} candles from Binance`);
+      setCandles(candles);
+    } catch (e) {
+      console.error('Binance history load failed:', e);
     }
   }
 
