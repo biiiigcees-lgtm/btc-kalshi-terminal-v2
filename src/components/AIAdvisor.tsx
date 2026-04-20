@@ -250,17 +250,6 @@ export default function AIAdvisor() {
         <span className="text-[10px] font-display text-[#666680] uppercase tracking-widest">AI Trade Advisor</span>
         <div className="flex items-center gap-2">
           <span className="text-[9px] text-[#00ff88] font-mono">● AUTO</span>
-          <button
-            onClick={handleAnalyze}
-            disabled={loading}
-            className={`px-3 py-1 text-xs font-mono font-bold rounded transition-all border ${loading ? 'bg-[#1e1e2e] text-[#666680] border-[#333350] cursor-not-allowed' : 'bg-[#4488ff] text-white border-[#4488ff] cursor-pointer'}`}
-          >
-            {loading ? (
-              <span className="flex items-center gap-1">
-                <span className="pulse-green">◈</span> ANALYZING...
-              </span>
-            ) : '⚡ ANALYZE NOW'}
-          </button>
         </div>
       </div>
 
