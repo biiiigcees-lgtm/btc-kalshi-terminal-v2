@@ -192,9 +192,16 @@ export default function AIAdvisor() {
       setMessages(m => [...m, { role: 'assistant', content: data.result, ts: Date.now() }]);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
+      let userMessage = `ERROR: Analysis failed after 3 attempts. ${errorMessage}\n\nPlease try again or check your connection.`;
+      
+      // Check if it's a Gemini quota error
+      if (errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+        userMessage = `⚠️ GEMINI API QUOTA EXCEEDED\n\nThe free tier quota has been reached. To continue using AI analysis:\n\n1. Upgrade to a paid Gemini API plan at https://ai.google.dev/gemini-api/docs/rate-limits\n2. Or wait ~24 hours for the quota to reset\n\nError: ${errorMessage}`;
+      }
+      
       setMessages(m => [...m, { 
         role: 'assistant', 
-        content: `ERROR: Analysis failed after 3 attempts. ${errorMessage}\n\nPlease try again or check your connection.`, 
+        content: userMessage,
         ts: Date.now() 
       }]);
     } finally {
