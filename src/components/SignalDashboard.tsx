@@ -110,6 +110,17 @@ export default function SignalDashboard() {
     }
   }, [signals]);
 
+  // Auto-analyze when signals load or regime shift detected
+  useEffect(() => {
+    if (signals.length > 0 && !isLoading && !error) {
+      // Trigger auto-analysis when signals are loaded
+      if (typeof globalThis !== 'undefined' && globalThis.window) {
+        const context = `Signal analysis complete. ${signals.length} indicators loaded. Ensemble probability: ${ensembleProbability.toFixed(1)}%. Regime shift detected: ${regimeShiftDetected ? 'YES' : 'NO'}.`;
+        globalThis.window.dispatchEvent(new CustomEvent('auto-analyze', { detail: context }));
+      }
+    }
+  }, [signals, isLoading, error, ensembleProbability, regimeShiftDetected]);
+
   return (
     <div className="flex flex-col h-full p-2 gap-2">
       {/* Header */}
