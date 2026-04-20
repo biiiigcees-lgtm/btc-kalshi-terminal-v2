@@ -210,8 +210,9 @@ export default function TradeLog() {
         <div className="px-2 pb-2 space-y-2 border-b border-[#1e1e2e]">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[9px] font-display text-[#666680] uppercase tracking-widest block mb-1">Direction</label>
+              <label htmlFor="trade-direction" className="text-[9px] font-display text-[#666680] uppercase tracking-widest block mb-1">Direction</label>
               <select
+                id="trade-direction"
                 value={manualTrade.direction}
                 onChange={(e) => setManualTrade({...manualTrade, direction: e.target.value as 'UP' | 'DOWN'})}
                 className="w-full bg-[#1e1e2e] text-xs font-mono text-[#e8e8f0] rounded px-2 py-1 border border-[#333350] focus:outline-none focus:border-[#4488ff]"
