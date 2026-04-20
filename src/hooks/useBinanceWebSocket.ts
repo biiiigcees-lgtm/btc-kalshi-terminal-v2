@@ -26,6 +26,7 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
   const tickerBackoff = useRef(1000);
 
   async function loadHistory() {
+    console.log('Starting to load candle history...');
     try {
       const res = await fetch(KRAKEN_OHLC_URL);
       if (!res.ok) {
@@ -37,6 +38,7 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
       const json = await res.json();
       // Kraken returns: { result: { XBTUSDT: [[time, open, high, low, close, vwap, volume, count], ...] } }
       const ohlc = json.result?.XBTUSDT || json.result?.XXBTZUSD || [];
+      console.log('Kraken OHLC data received, length:', ohlc.length);
       if (ohlc.length === 0) {
         console.error('No OHLC data received from Kraken, trying Binance...');
         await loadHistoryFromBinance();
