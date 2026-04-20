@@ -14,7 +14,10 @@ import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket';
 import { useSignalEngine } from '@/hooks/useSignalEngine';
 
 // Dynamically import chart to avoid SSR issues with lightweight-charts
-const BTCChart = dynamic(() => import('@/components/BTCChart'), { ssr: false });
+const BTCChart = dynamic(() => import('@/components/BTCChart'), { 
+  ssr: false,
+  loading: () => <div className="panel overflow-hidden h-[300px] flex items-center justify-center text-[#666680] text-xs font-mono">Loading chart...</div>
+});
 
 function Dashboard() {
   const { recompute } = useSignalEngine();
