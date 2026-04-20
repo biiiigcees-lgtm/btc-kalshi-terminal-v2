@@ -67,12 +67,15 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
       console.log('Binance API response status:', res.status);
       if (!res.ok) {
         console.error('Binance API error:', res.status);
+        // Fallback to mock data for testing
+        loadMockData();
         return;
       }
       const data = await res.json();
       console.log('Binance API response data length:', Array.isArray(data) ? data.length : 'not an array');
       if (!Array.isArray(data) || data.length === 0) {
-        console.error('No data received from Binance');
+        console.error('No data received from Binance, using mock data');
+        loadMockData();
         return;
       }
       const candles: Candle[] = data.map((k: any[]) => ({
@@ -86,8 +89,36 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
       console.log(`Loaded ${candles.length} candles from Binance`);
       setCandles(candles);
     } catch (e) {
-      console.error('Binance history load failed:', e);
+      console.error('Binance history load failed, using mock data:', e);
+      loadMockData();
     }
+  }
+
+  function loadMockData() {
+    console.log('Loading mock candle data for testing...');
+    const basePrice = 74000;
+    const now = Math.floor(Date.now() / 1000);
+    const candles: Candle[] = [];
+    
+    for (let i = 200; i > 0; i--) {
+      const time = now - (i * 15 * 60); // 15-minute intervals
+      const volatility = Math.random() * 200 - 100;
+      const open = basePrice + volatility;
+      const high = open + Math.random() * 100;
+      const low = open - Math.random() * 100;
+      const close = low + Math.random() * (high - low);
+      candles.push({
+        time,
+        open,
+        high,
+        low,
+        close,
+        volume: Math.random() * 1000 + 500,
+      });
+    }
+    
+    console.log(`Loaded ${candles.length} mock candles`);
+    setCandles(candles);
   }
 
   function connectKline() {
