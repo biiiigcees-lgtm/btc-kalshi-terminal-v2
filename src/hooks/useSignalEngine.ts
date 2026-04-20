@@ -17,7 +17,7 @@ export function useSignalEngine() {
   const recompute = useCallback(() => {
     const state = usePriceStore.getState();
     const c = state.candles;
-    if (c.length < 210) return;
+    if (c.length < 50) return; // Reduced from 210 to 50 for faster signal generation
 
     const signals = computeSignals(c);
     const newRegime = detectRegime(c);

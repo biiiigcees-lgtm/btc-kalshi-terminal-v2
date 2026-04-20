@@ -246,10 +246,18 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
     const cgPoll = setInterval(async () => {
       try {
         const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+        if (!res.ok) {
+          console.error('CoinGecko API error:', res.status);
+          return;
+        }
         const data = await res.json();
-        usePriceStore.getState().setCoingeckoPrice(data.bitcoin.usd);
-      } catch {
-        // CoinGecko fetch failed - will retry on next poll
+        if (data.bitcoin?.usd) {
+          usePriceStore.getState().setCoingeckoPrice(data.bitcoin.usd);
+        } else {
+          console.error('CoinGecko response missing price data:', data);
+        }
+      } catch (err) {
+        console.error('CoinGecko fetch failed:', err);
       }
     }, 30000);
 
