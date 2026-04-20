@@ -251,8 +251,8 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
     // Start REST API fallback for price
     const restInterval = startRestFallback();
 
-    // Poll CoinGecko every 30s
-    const cgPoll = setInterval(async () => {
+    // Immediate CoinGecko fetch on mount
+    const fetchCoinGecko = async () => {
       try {
         const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
         if (!res.ok) {
@@ -262,13 +262,19 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
         const data = await res.json();
         if (data.bitcoin?.usd) {
           usePriceStore.getState().setCoingeckoPrice(data.bitcoin.usd);
+          console.log('CoinGecko price loaded:', data.bitcoin.usd);
         } else {
           console.error('CoinGecko response missing price data:', data);
         }
       } catch (err) {
         console.error('CoinGecko fetch failed:', err);
       }
-    }, 30000);
+    };
+
+    fetchCoinGecko();
+
+    // Poll CoinGecko every 30s
+    const cgPoll = setInterval(fetchCoinGecko, 30000);
 
     return () => {
       klineWs.current?.close();
