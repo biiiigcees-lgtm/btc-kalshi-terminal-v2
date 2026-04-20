@@ -100,9 +100,8 @@ async function fetchWithRetry(
 
 export default function AIAdvisor() {
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'system', content: 'KALSHI BTC INTELLIGENCE TERMINAL — READY\nPress ⚡ ANALYZE THIS WINDOW to get a full trade analysis.', ts: Date.now() }
+    { role: 'system', content: 'KALSHI BTC INTELLIGENCE TERMINAL — READY\nAI will automatically analyze market conditions and provide trading decisions.', ts: Date.now() }
   ]);
-  const [inputVal, setInputVal] = useState('');
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const analysisInProgress = useRef(false);
@@ -244,12 +243,6 @@ export default function AIAdvisor() {
     sendToAI(ctx);
   }
 
-  function handleManualSend() {
-    if (!inputVal.trim() || loading) return;
-    sendToAI(inputVal.trim());
-    setInputVal('');
-  }
-
   return (
     <div className="flex flex-col h-full bg-[#0d0d14] font-mono">
       {/* Header */}
@@ -299,20 +292,6 @@ export default function AIAdvisor() {
           </div>
         )}
         <div ref={bottomRef} />
-      </div>
-
-      {/* Input */}
-      <div className="border-t border-[#1e1e2e] px-3 py-2 flex items-center gap-2">
-        <span className="text-[#4488ff] text-sm">›</span>
-        <input
-          className="flex-1 bg-transparent text-xs font-mono text-[#e8e8f0] focus:outline-none placeholder-[#333350]"
-          placeholder="Ask a custom question..."
-          value={inputVal}
-          onChange={e => setInputVal(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleManualSend()}
-          disabled={loading}
-        />
-        <span className="cursor-blink text-[#4488ff] text-sm">▋</span>
       </div>
     </div>
   );
