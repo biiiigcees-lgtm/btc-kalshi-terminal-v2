@@ -5,10 +5,10 @@
 @tailwind utilities;
 
 :root {
-  --bg-base:        #0a0a0f;
-  --bg-panel:       #111118;
-  --bg-elevated:    #0d0d14;
-  --border:         #1e1e2e;
+  --bg-base:        #070710;
+  --bg-panel:       #0d0d14;
+  --bg-elevated:    #111118;
+  --border:         #1a1a2a;
   --text-primary:   #e8e8f0;
   --text-secondary: #666680;
   --text-muted:     #333350;
@@ -30,13 +30,15 @@ html, body {
   background: var(--bg-base);
   color: var(--text-primary);
   font-family: 'JetBrains Mono', monospace;
+  /* Prevent horizontal scroll on mobile */
+  overflow-x: hidden;
 }
 
 /* Scrollbar */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: var(--bg-panel); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1e1e2e; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #333350; }
 
 /* Input resets */
 input[type="number"]::-webkit-inner-spin-button,
@@ -44,7 +46,8 @@ input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; marg
 input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* Focus ring */
-input:focus, button:focus { outline: none; box-shadow: 0 0 0 1px var(--accent-blue); }
+input:focus, button:focus { outline: none; }
+input:focus { box-shadow: 0 0 0 1px var(--accent-blue); }
 
 /* Panel base */
 .panel {
@@ -60,21 +63,26 @@ input:focus, button:focus { outline: none; box-shadow: 0 0 0 1px var(--accent-bl
 }
 .cursor-blink { animation: blink 1s step-end infinite; }
 
-/* Green pulse for live badge */
+/* Green pulse */
 @keyframes pulse-green {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.4); }
-  50% { opacity: 0.8; box-shadow: 0 0 0 4px rgba(0, 255, 136, 0); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 .pulse-green { animation: pulse-green 2s ease-in-out infinite; }
 
-/* Red pulse for urgent alerts */
+/* Red pulse */
 @keyframes pulse-red {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  50% { opacity: 0.4; }
 }
 .pulse-red { animation: pulse-red 0.8s ease-in-out infinite; }
 
-/* Scanline texture overlay */
+/* Trade log border accent classes */
+.trade-border-win  { border-left: 2px solid #00ff88; }
+.trade-border-loss { border-left: 2px solid #ff4466; }
+.trade-border-pending { border-left: 2px solid #4488ff; }
+
+/* Scanline overlay for terminal feel */
 .scanlines::after {
   content: '';
   position: absolute;
@@ -83,9 +91,16 @@ input:focus, button:focus { outline: none; box-shadow: 0 0 0 1px var(--accent-bl
     0deg,
     transparent,
     transparent 2px,
-    rgba(0,0,0,0.03) 2px,
-    rgba(0,0,0,0.03) 4px
+    rgba(0,0,0,0.015) 2px,
+    rgba(0,0,0,0.015) 4px
   );
   pointer-events: none;
   z-index: 0;
+}
+
+/* Mobile-first safe zones */
+@media (max-width: 1023px) {
+  .mobile-safe {
+    padding-bottom: env(safe-area-inset-bottom, 16px);
+  }
 }

@@ -1,4 +1,3 @@
-// /app/page.tsx
 'use client';
 import dynamic from 'next/dynamic';
 import TopBar from '@/components/TopBar';
@@ -13,222 +12,192 @@ import TradeLog from '@/components/TradeLog';
 import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket';
 import { useSignalEngine } from '@/hooks/useSignalEngine';
 
-// Dynamically import chart to avoid SSR issues with lightweight-charts
-const BTCChart = dynamic(() => import('@/components/BTCChart'), { 
+const BTCChart = dynamic(() => import('@/components/BTCChart'), {
   ssr: false,
-  loading: () => <div className="panel overflow-hidden h-[300px] flex items-center justify-center text-[#666680] text-xs font-mono">Loading chart...</div>
+  loading: () => (
+    <div className="w-full h-full flex items-center justify-center text-[#333350] text-xs font-mono">
+      Loading chart...
+    </div>
+  ),
 });
+
+function SectionLabel({ color, label }: { color: string; label: string }) {
+  return (
+    <div className="flex items-center gap-2 px-1 mb-1 flex-shrink-0">
+      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: color }} />
+      <span className="text-[9px] font-mono text-[#444460] uppercase tracking-[0.2em]">{label}</span>
+    </div>
+  );
+}
+
+function Panel({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`bg-[#0d0d14] border border-[#1a1a2a] rounded-md overflow-hidden ${className}`}>
+      {children}
+    </div>
+  );
+}
 
 function Dashboard() {
   const { recompute } = useSignalEngine();
   useBinanceWebSocket(recompute);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[#0a0a0f] mobile-dashboard">
-      {/* Risk Alert Banner — floats above everything */}
+    <div className="flex flex-col bg-[#070710] min-h-screen">
+      {/* Risk alerts float at top */}
       <RiskAlertBanner />
 
-      {/* TOP BAR */}
-      <TopBar />
+      {/* Top bar — always visible */}
+      <div className="flex-shrink-0">
+        <TopBar />
+      </div>
 
-      {/* MOBILE LAYOUT - Biological Grouping */}
-      <div className="mobile-layout flex-1 overflow-y-auto lg:hidden">
-        <div className="p-2 space-y-3">
-          
-          {/* GROUP 1: SENSORY - Market Perception */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 px-1">
-              <div className="w-2 h-2 rounded-full bg-[#00ff88]" />
-              <span className="text-[10px] font-display text-[#666680] uppercase tracking-widest">SENSORY</span>
-            </div>
-            <div className="panel p-3">
-              <TopBar />
-            </div>
-            <div className="panel overflow-hidden h-[300px]">
-              <BTCChart />
-            </div>
-          </div>
+      {/* ═══════════════════════════════════════
+          MOBILE LAYOUT (< lg)
+          Single column, scrollable, logical order
+          ═══════════════════════════════════════ */}
+      <div className="lg:hidden flex flex-col gap-3 p-3 pb-8">
 
-          {/* GROUP 2: TEMPORAL - Time Awareness */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 px-1">
-              <div className="w-2 h-2 rounded-full bg-[#ffaa00]" />
-              <span className="text-[10px] font-display text-[#666680] uppercase tracking-widest">TEMPORAL</span>
-            </div>
-            <div className="panel p-2">
-              <CountdownTimer />
-            </div>
+        {/* SENSORY — Chart */}
+        <div>
+          <SectionLabel color="#00ff88" label="SENSORY" />
+          <Panel className="h-[260px]">
+            <BTCChart />
+          </Panel>
+        </div>
+
+        {/* TEMPORAL — Countdown + Inputs */}
+        <div>
+          <SectionLabel color="#ffaa00" label="TEMPORAL" />
+          <Panel>
+            <CountdownTimer />
+          </Panel>
+        </div>
+
+        {/* ANALYSIS — Signals + Gauges stacked */}
+        <div>
+          <SectionLabel color="#4488ff" label="ANALYSIS" />
+          <div className="flex flex-col gap-2">
+            <Panel className="h-[340px]">
+              <SignalDashboard />
+            </Panel>
+            <Panel className="h-[220px]">
+              <EnsembleGauges />
+            </Panel>
           </div>
-          
-          {/* GROUP 3: ANALYSIS - Pattern Recognition */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 px-1">
-              <div className="w-2 h-2 rounded-full bg-[#4488ff]" />
-              <span className="text-[10px] font-display text-[#666680] uppercase tracking-widest">ANALYSIS</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="panel p-2 h-[180px]">
-                <SignalDashboard />
-              </div>
-              <div className="panel p-2 h-[180px]">
-                <EnsembleGauges />
-              </div>
-            </div>
-          </div>
-          
-          {/* GROUP 4: DECISION - Risk Assessment */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 px-1">
-              <div className="w-2 h-2 rounded-full bg-[#ff66cc]" />
-              <span className="text-[10px] font-display text-[#666680] uppercase tracking-widest">DECISION</span>
-            </div>
-            <div className="panel p-2">
-              <PositionSizingPanel />
-            </div>
-            <div className="panel p-2 h-[180px]">
-              <AIAdvisor />
-            </div>
-          </div>
-          
-          {/* GROUP 5: EXECUTION - Action Center */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 px-1">
-              <div className="w-2 h-2 rounded-full bg-[#ff4466]" />
-              <span className="text-[10px] font-display text-[#666680] uppercase tracking-widest">EXECUTION</span>
-            </div>
-            <div className="panel p-2 h-[280px]">
-              <PaperTradingPanel />
-            </div>
-          </div>
-          
-          {/* GROUP 6: MEMORY - Learning & History */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 px-1">
-              <div className="w-2 h-2 rounded-full bg-[#8888aa]" />
-              <span className="text-[10px] font-display text-[#666680] uppercase tracking-widest">MEMORY</span>
-            </div>
-            <div className="panel p-2 h-[200px]">
-              <TradeLog />
-            </div>
-          </div>
+        </div>
+
+        {/* DECISION — Position sizing */}
+        <div>
+          <SectionLabel color="#ff66cc" label="DECISION" />
+          <Panel>
+            <PositionSizingPanel />
+          </Panel>
+        </div>
+
+        {/* AI ADVISOR */}
+        <div>
+          <SectionLabel color="#aa44ff" label="AI ADVISOR" />
+          <Panel className="h-[320px]">
+            <AIAdvisor />
+          </Panel>
+        </div>
+
+        {/* EXECUTION — Paper trading */}
+        <div>
+          <SectionLabel color="#ff4466" label="EXECUTION" />
+          <Panel className="h-[360px]">
+            <PaperTradingPanel />
+          </Panel>
+        </div>
+
+        {/* MEMORY — Trade log */}
+        <div>
+          <SectionLabel color="#8888aa" label="MEMORY" />
+          <Panel className="h-[400px]">
+            <TradeLog />
+          </Panel>
         </div>
       </div>
 
-      {/* DESKTOP LAYOUT - Biological Functional Zones */}
+      {/* ═══════════════════════════════════════
+          DESKTOP LAYOUT (>= lg)
+          Fixed height viewport, 3-column grid
+          No overflow, no overlap
+          ═══════════════════════════════════════ */}
       <div
-        className="hidden lg:grid flex-1 overflow-hidden desktop-layout p-[6px] gap-[6px]"
-        style={{
-          gridTemplateColumns: '240px 1fr 280px',
-          gridTemplateRows: '1fr 1fr 200px',
-        }}
+        className="hidden lg:flex flex-col flex-1 overflow-hidden"
+        style={{ height: 'calc(100vh - 57px)' }}
       >
-        {/* ═══════════════════════════════════════════════════════════
-           COLUMN 1: SENSORY & TEMPORAL (Left - Time & Market Awareness)
-           ═══════════════════════════════════════════════════════════ */}
-        <div
-          className="overflow-hidden flex flex-col gap-[6px]"
-          style={{
-            gridColumn: '1',
-            gridRow: '1 / 2',
-          }}
-        >
-          {/* Temporal Group */}
-          <div className="flex items-center gap-2 px-1">
-            <div className="w-2 h-2 rounded-full bg-[#ffaa00]" />
-            <span className="text-[9px] font-display text-[#666680] uppercase tracking-widest">TEMPORAL</span>
+        {/* Main 3-column area */}
+        <div className="flex flex-1 gap-2 p-2 overflow-hidden min-h-0">
+
+          {/* ── COLUMN 1: Temporal + Sensory ── */}
+          <div className="flex flex-col gap-2 overflow-hidden" style={{ width: '260px', flexShrink: 0 }}>
+            <div className="flex flex-col gap-1 flex-shrink-0">
+              <SectionLabel color="#ffaa00" label="TEMPORAL" />
+              <Panel>
+                <CountdownTimer />
+              </Panel>
+            </div>
+            <div className="flex flex-col gap-1 flex-1 min-h-0">
+              <SectionLabel color="#00ff88" label="SENSORY" />
+              <Panel className="flex-1 min-h-0">
+                <BTCChart />
+              </Panel>
+            </div>
           </div>
-          <div className="panel overflow-hidden flex-shrink-0 h-[140px]">
-            <CountdownTimer />
+
+          {/* ── COLUMN 2: Analysis + Decision + AI ── */}
+          <div className="flex flex-col gap-2 flex-1 min-w-0 overflow-hidden">
+
+            {/* Analysis row */}
+            <div className="flex flex-col gap-1 flex-shrink-0">
+              <SectionLabel color="#4488ff" label="ANALYSIS" />
+              <div className="grid grid-cols-2 gap-2" style={{ height: '240px' }}>
+                <Panel>
+                  <SignalDashboard />
+                </Panel>
+                <Panel>
+                  <EnsembleGauges />
+                </Panel>
+              </div>
+            </div>
+
+            {/* Decision row */}
+            <div className="flex flex-col gap-1 flex-shrink-0">
+              <SectionLabel color="#ff66cc" label="DECISION" />
+              <Panel>
+                <PositionSizingPanel />
+              </Panel>
+            </div>
+
+            {/* AI Advisor */}
+            <div className="flex flex-col gap-1 flex-1 min-h-0">
+              <SectionLabel color="#aa44ff" label="AI ADVISOR" />
+              <Panel className="flex-1 min-h-0">
+                <AIAdvisor />
+              </Panel>
+            </div>
           </div>
-          
-          {/* Sensory Group */}
-          <div className="flex items-center gap-2 px-1 mt-2">
-            <div className="w-2 h-2 rounded-full bg-[#00ff88]" />
-            <span className="text-[9px] font-display text-[#666680] uppercase tracking-widest">SENSORY</span>
-          </div>
-          <div className="panel overflow-hidden flex-1 min-h-[200px]">
-            <div className="h-full">
-              <BTCChart />
+
+          {/* ── COLUMN 3: Execution ── */}
+          <div className="flex flex-col gap-2 overflow-hidden" style={{ width: '280px', flexShrink: 0 }}>
+            <div className="flex flex-col gap-1 flex-1 min-h-0">
+              <SectionLabel color="#ff4466" label="EXECUTION" />
+              <Panel className="flex-1 min-h-0">
+                <PaperTradingPanel />
+              </Panel>
             </div>
           </div>
         </div>
 
-        {/* ═══════════════════════════════════════════════════════════
-           COLUMN 2: ANALYSIS & DECISION (Center - Cognitive Processing)
-           ═══════════════════════════════════════════════════════════ */}
-        <div
-          className="overflow-hidden flex flex-col gap-[6px]"
-          style={{
-            gridColumn: '2',
-            gridRow: '1 / 3',
-          }}
-        >
-          {/* Analysis Group */}
-          <div className="flex items-center gap-2 px-1">
-            <div className="w-2 h-2 rounded-full bg-[#4488ff]" />
-            <span className="text-[9px] font-display text-[#666680] uppercase tracking-widest">ANALYSIS</span>
-          </div>
-          <div 
-            className="overflow-hidden grid grid-cols-2 gap-[6px] h-[200px]"
-          >
-            <div className="panel overflow-hidden">
-              <SignalDashboard />
-            </div>
-            <div className="panel overflow-hidden">
-              <EnsembleGauges />
-            </div>
-          </div>
-
-          {/* Decision Group */}
-          <div className="flex items-center gap-2 px-1 mt-1">
-            <div className="w-2 h-2 rounded-full bg-[#ff66cc]" />
-            <span className="text-[9px] font-display text-[#666680] uppercase tracking-widest">DECISION</span>
-          </div>
-          <div className="panel overflow-hidden flex-shrink-0 h-[80px]">
-            <PositionSizingPanel />
-          </div>
-          
-          <div className="panel overflow-hidden flex-1 min-h-[150px]">
-            <AIAdvisor />
-          </div>
-        </div>
-
-        {/* ═══════════════════════════════════════════════════════════
-           COLUMN 3: EXECUTION (Right - Action & Motor)
-           ═══════════════════════════════════════════════════════════ */}
-        <div
-          className="overflow-hidden flex flex-col gap-[6px]"
-          style={{
-            gridColumn: '3',
-            gridRow: '1 / 3',
-          }}
-        >
-          <div className="flex items-center gap-2 px-1">
-            <div className="w-2 h-2 rounded-full bg-[#ff4466]" />
-            <span className="text-[9px] font-display text-[#666680] uppercase tracking-widest">EXECUTION</span>
-          </div>
-          <div className="panel overflow-hidden flex-1">
-            <PaperTradingPanel />
-          </div>
-        </div>
-
-        {/* ═══════════════════════════════════════════════════════════
-           ROW 3: MEMORY (Bottom - Full Width Learning Center)
-           ═══════════════════════════════════════════════════════════ */}
-        <div
-          className="overflow-hidden flex flex-col gap-[6px]"
-          style={{
-            gridColumn: '1 / 4',
-            gridRow: '3',
-          }}
-        >
-          <div className="flex items-center gap-2 px-1">
-            <div className="w-2 h-2 rounded-full bg-[#8888aa]" />
-            <span className="text-[9px] font-display text-[#666680] uppercase tracking-widest">MEMORY & LEARNING</span>
-          </div>
-          <div className="panel overflow-hidden flex-1">
+        {/* ── BOTTOM ROW: Memory / Trade Log ── */}
+        <div className="flex flex-col gap-1 px-2 pb-2 flex-shrink-0" style={{ height: '200px' }}>
+          <SectionLabel color="#8888aa" label="MEMORY & LEARNING" />
+          <Panel className="flex-1 min-h-0">
             <TradeLog />
-          </div>
+          </Panel>
         </div>
       </div>
     </div>
