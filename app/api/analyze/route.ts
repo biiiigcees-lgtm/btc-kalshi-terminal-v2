@@ -1,18 +1,17 @@
-// /app/api/analyze/route.ts — SERVER ONLY
-// Using Vercel AI SDK with Groq API and Cerebras fallback
+// /app/api/analyze/route.ts — FIXED
+// FIXES:
+// 1. Replaced generateObject (Groq structured output is unreliable) with direct text generation
+// 2. Uses Anthropic Claude API directly as primary (reliable, no structured output issues)
+// 3. Falls back to Groq text generation (not generateObject) if Claude key missing
+// 4. Rate limiter kept, improved IP handling
+// 5. Response formatted correctly for AIAdvisor component
 import { NextRequest, NextResponse } from 'next/server';
-import { generateObject } from 'ai';
-import { groq } from '@ai-sdk/groq';
-import { createOpenAI } from '@ai-sdk/openai';
-import { z } from 'zod';
 import { SYSTEM_PROMPT } from '../../../src/constants/systemPrompt';
 
-// Simple in-memory rate limiter: 1 request per 10 seconds per IP
 const rateLimiter = new Map<string, number>();
-const RATE_LIMIT_MS = 10000; // 10 seconds
+const RATE_LIMIT_MS = 15000; // 15 seconds between requests per IP
 
 function getClientIP(req: NextRequest): string {
-  // Get IP from various headers
   const forwarded = req.headers.get('x-forwarded-for');
   const realIP = req.headers.get('x-real-ip');
   return forwarded?.split(',')[0]?.trim() || realIP || 'unknown';
@@ -21,134 +20,113 @@ function getClientIP(req: NextRequest): string {
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
   const lastRequest = rateLimiter.get(ip);
-  
-  if (lastRequest && now - lastRequest < RATE_LIMIT_MS) {
-    return false; // Rate limited
-  }
-  
+  if (lastRequest && now - lastRequest < RATE_LIMIT_MS) return false;
   rateLimiter.set(ip, now);
-  return true; // Allowed
+  // Clean old entries periodically
+  if (rateLimiter.size > 1000) {
+    for (const [key, ts] of Array.from(rateLimiter)) {
+      if (now - ts > 60000) rateLimiter.delete(key);
+    }
+  }
+  return true;
 }
 
-// Zod schema for structured output
-const SignalSchema = z.object({
-  marketContext: z.string(),
-  signalAnalysis: z.string(),
-  ensemblePrediction: z.string(),
-  edgeQuantification: z.string(),
-  betRecommendation: z.string(),
-  positionSizing: z.string(),
-  riskParameters: z.string(),
-  trajectoryPrediction: z.string(),
-  executionTiming: z.string(),
-  confidence: z.string(),
-  performanceAlerts: z.string(),
-  // Numeric fields for validation
-  kellyFraction: z.number().min(0).max(0.25), // Kelly fraction capped at 25%
-  recommendedBet: z.number().min(0),
-  ensembleProbability: z.number().min(0).max(100),
-  edge: z.number().min(-100).max(100),
-});
+async function callClaude(marketContext: string): Promise<string> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY || '',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001', // fast + cheap for trading advisor
+      max_tokens: 1024,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: marketContext }],
+    }),
+  });
 
-// Cerebras as fallback
-const cerebras = createOpenAI({
-  baseURL: 'https://api.cerebras.ai/v1',
-  apiKey: process.env.GROQ_API_KEY, // Use same key for now
-});
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Claude API error ${res.status}: ${err}`);
+  }
+
+  const data = await res.json();
+  const text = data.content?.[0]?.text;
+  if (!text) throw new Error('Empty response from Claude');
+  return text;
+}
+
+async function callGroq(marketContext: string): Promise<string> {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 1024,
+      temperature: 0.2,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: marketContext },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Groq API error ${res.status}: ${err}`);
+  }
+
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error('Empty response from Groq');
+  return text;
+}
 
 export async function POST(req: NextRequest) {
-  // Rate limiting check
   const clientIP = getClientIP(req);
   if (!checkRateLimit(clientIP)) {
     return NextResponse.json(
-      { error: 'Rate limit exceeded. Please wait 10 seconds between analyses.' },
+      { error: 'Rate limit: please wait 15 seconds between analyses.' },
       { status: 429 }
     );
   }
 
   try {
     const { marketContext } = await req.json();
-
-    if (!process.env.GROQ_API_KEY) {
-      return NextResponse.json({ error: 'GROQ_API_KEY not configured' }, { status: 500 });
+    if (!marketContext || typeof marketContext !== 'string') {
+      return NextResponse.json({ error: 'marketContext is required' }, { status: 400 });
     }
 
-    let result;
-    let usedFallback = false;
+    let result: string;
 
-    try {
-      // Try Groq first
-      const object = await generateObject({
-        model: groq('llama-3.3-70b-versatile'),
-        schema: SignalSchema,
-        prompt: `${SYSTEM_PROMPT}\n\nMarket Context:\n${marketContext}`,
-        temperature: 0.2,
-      });
-      result = object.object;
-    } catch (groqError: any) {
-      // Fallback to Cerebras on 429 or 503 errors
-      if (groqError?.status === 429 || groqError?.status === 503) {
-        console.log('Groq rate limited, falling back to Cerebras');
-        usedFallback = true;
-        try {
-          const object = await generateObject({
-            model: cerebras('llama-3.3-70b'),
-            schema: SignalSchema,
-            prompt: `${SYSTEM_PROMPT}\n\nMarket Context:\n${marketContext}`,
-            temperature: 0.2,
-          });
-          result = object.object;
-        } catch (cerebrasError: any) {
-          console.error('Cerebras fallback also failed:', cerebrasError);
-          return NextResponse.json({ error: `Both Groq and Cerebras failed: ${cerebrasError.message}` }, { status: 500 });
+    // Try Claude first (most reliable), fall back to Groq
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        result = await callClaude(marketContext);
+      } catch (claudeErr) {
+        console.warn('Claude failed, trying Groq:', claudeErr);
+        if (!process.env.GROQ_API_KEY) {
+          return NextResponse.json({ error: 'No AI API key configured. Set ANTHROPIC_API_KEY or GROQ_API_KEY in Vercel environment variables.' }, { status: 500 });
         }
-      } else {
-        throw groqError;
+        result = await callGroq(marketContext);
       }
+    } else if (process.env.GROQ_API_KEY) {
+      result = await callGroq(marketContext);
+    } else {
+      return NextResponse.json({
+        error: 'No AI API key configured. Add ANTHROPIC_API_KEY or GROQ_API_KEY to Vercel → Settings → Environment Variables.'
+      }, { status: 500 });
     }
 
-    // Format the structured output into a readable response
-    const formattedResponse = [
-      `═══ MARKET CONTEXT ═══`,
-      result.marketContext,
-      '',
-      `═══ SIGNAL ANALYSIS ═══`,
-      result.signalAnalysis,
-      '',
-      `═══ ENSEMBLE PREDICTION ═══`,
-      result.ensemblePrediction,
-      '',
-      `═══ EDGE QUANTIFICATION ═══`,
-      result.edgeQuantification,
-      '',
-      `═══ BET RECOMMENDATION ═══`,
-      result.betRecommendation,
-      '',
-      `═══ POSITION SIZING ═══`,
-      result.positionSizing,
-      '',
-      `═══ RISK PARAMETERS ═══`,
-      result.riskParameters,
-      '',
-      `═══ TRAJECTORY PREDICTION ═══`,
-      result.trajectoryPrediction,
-      '',
-      `═══ EXECUTION TIMING ═══`,
-      result.executionTiming,
-      '',
-      `═══ CONFIDENCE AND UNCERTAINTY ═══`,
-      result.confidence,
-      '',
-      `═══ PERFORMANCE ALERTS ═══`,
-      result.performanceAlerts,
-    ].join('\n');
-
-    return NextResponse.json({ 
-      result: formattedResponse,
-      usedFallback 
-    });
-  } catch (err) {
-    console.error('analyze route error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ result });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('analyze route error:', message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

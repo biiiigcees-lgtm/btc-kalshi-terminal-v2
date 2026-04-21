@@ -1,27 +1,10 @@
-// /src/utils/indicators.ts
-import {
-  RSI,
-  MACD,
-  Stochastic,
-  ROC,
-  BollingerBands,
-  EMA,
-  ATR,
-} from 'technicalindicators';
+// /src/utils/indicators.ts — FIXED
+// Pure math implementation — no technicalindicators library dependency
+// Minimum candle requirement reduced from 210 → 55 (EMA200 replaced with EMA50 alignment)
 import type { Candle, SignalResult } from '../types';
 
 function clamp(val: number, min = 0, max = 1): number {
   return Math.max(min, Math.min(max, val));
-}
-
-function computeVWAP(candles: Candle[]): number {
-  let cumVol = 0, cumTP = 0;
-  for (const c of candles) {
-    const tp = (c.high + c.low + c.close) / 3;
-    cumTP += tp * c.volume;
-    cumVol += c.volume;
-  }
-  return cumVol > 0 ? cumTP / cumVol : candles[candles.length - 1]?.close ?? 0;
 }
 
 function mean(arr: number[]): number {
@@ -33,263 +16,299 @@ function stdDev(arr: number[]): number {
   return Math.sqrt(arr.reduce((s, v) => s + Math.pow(v - m, 2), 0) / arr.length);
 }
 
-// Helper functions to reduce cognitive complexity
-function getRSIDirection(rsi: number): 'bullish' | 'bearish' | 'neutral' {
-  if (rsi > 55) return 'bullish';
-  if (rsi < 45) return 'bearish';
-  return 'neutral';
+function calcEMA(values: number[], period: number): number[] {
+  if (values.length < period) return [];
+  const k = 2 / (period + 1);
+  const result: number[] = [];
+  let ema = values.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  result.push(ema);
+  for (let i = period; i < values.length; i++) {
+    ema = values[i] * k + ema * (1 - k);
+    result.push(ema);
+  }
+  return result;
 }
 
-function getMACDDirection(histogram: number): 'bullish' | 'bearish' | 'neutral' {
-  if (histogram > 0) return 'bullish';
-  if (histogram < 0) return 'bearish';
-  return 'neutral';
+function calcRSI(closes: number[], period = 14): number {
+  if (closes.length < period + 1) return 50;
+  let gains = 0, losses = 0;
+  for (let i = closes.length - period; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) gains += d; else losses += Math.abs(d);
+  }
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return 100 - 100 / (1 + rs);
 }
 
-function getStochasticDirection(k: number): 'bullish' | 'bearish' | 'neutral' {
-  if (k > 60) return 'bullish';
-  if (k < 40) return 'bearish';
-  return 'neutral';
+function calcMACD(closes: number[]): { macd: number; signal: number; histogram: number } {
+  const ema12 = calcEMA(closes, 12);
+  const ema26 = calcEMA(closes, 26);
+  if (ema12.length === 0 || ema26.length === 0) return { macd: 0, signal: 0, histogram: 0 };
+  // Align lengths
+  const offset = ema12.length - ema26.length;
+  const macdLine = ema26.map((v, i) => ema12[i + offset] - v);
+  const signalLine = calcEMA(macdLine, 9);
+  if (signalLine.length === 0) return { macd: 0, signal: 0, histogram: 0 };
+  const macd = macdLine[macdLine.length - 1];
+  const signal = signalLine[signalLine.length - 1];
+  return { macd, signal, histogram: macd - signal };
 }
 
-function getROCDirection(roc: number): 'bullish' | 'bearish' | 'neutral' {
-  if (roc > 0) return 'bullish';
-  if (roc < 0) return 'bearish';
-  return 'neutral';
+function calcStochastic(highs: number[], lows: number[], closes: number[], period = 14): number {
+  if (closes.length < period) return 50;
+  const recentH = Math.max(...highs.slice(-period));
+  const recentL = Math.min(...lows.slice(-period));
+  if (recentH === recentL) return 50;
+  return ((closes[closes.length - 1] - recentL) / (recentH - recentL)) * 100;
 }
 
-function getBBDirection(pos: number): 'bullish' | 'bearish' | 'neutral' {
-  if (pos > 0.3) return 'bullish';
-  if (pos < -0.3) return 'bearish';
-  return 'neutral';
+function calcROC(closes: number[], period = 10): number {
+  if (closes.length < period + 1) return 0;
+  const old = closes[closes.length - 1 - period];
+  if (old === 0) return 0;
+  return ((closes[closes.length - 1] - old) / old) * 100;
 }
 
-function getZScoreDirection(zScore: number): 'bullish' | 'bearish' | 'neutral' {
-  if (zScore > 0.5) return 'bullish';
-  if (zScore < -0.5) return 'bearish';
-  return 'neutral';
+function calcBollingerPosition(closes: number[], period = 20): number {
+  if (closes.length < period) return 0;
+  const slice = closes.slice(-period);
+  const m = mean(slice);
+  const sd = stdDev(slice);
+  if (sd === 0) return 0;
+  const upper = m + 2 * sd;
+  const lower = m - 2 * sd;
+  const bandwidth = upper - m;
+  return bandwidth > 0 ? (closes[closes.length - 1] - m) / bandwidth : 0;
 }
 
-function getKeltnerDirection(pos: number): 'bullish' | 'bearish' | 'neutral' {
-  if (pos > 0.3) return 'bullish';
-  if (pos < -0.3) return 'bearish';
-  return 'neutral';
+function calcZScore(closes: number[], period = 20): number {
+  if (closes.length < period) return 0;
+  const slice = closes.slice(-period);
+  const m = mean(slice);
+  const sd = stdDev(slice);
+  return sd > 0 ? (closes[closes.length - 1] - m) / sd : 0;
 }
 
-function getEMADirection(e20: number, e50: number, e200: number): 'bullish' | 'bearish' | 'neutral' {
-  const bullishAlign = e20 > e50 && e50 > e200;
-  const bearishAlign = e20 < e50 && e50 < e200;
-  if (bullishAlign) return 'bullish';
-  if (bearishAlign) return 'bearish';
-  return 'neutral';
+function calcATR(highs: number[], lows: number[], closes: number[], period = 14): number[] {
+  const trs: number[] = [];
+  for (let i = 1; i < highs.length; i++) {
+    const tr = Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]),
+      Math.abs(lows[i] - closes[i - 1])
+    );
+    trs.push(tr);
+  }
+  if (trs.length < period) return [trs[trs.length - 1] || 0];
+  const result: number[] = [];
+  let atr = trs.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  result.push(atr);
+  for (let i = period; i < trs.length; i++) {
+    atr = (atr * (period - 1) + trs[i]) / period;
+    result.push(atr);
+  }
+  return result;
 }
 
-function getATRDirection(ratio: number): 'bullish' | 'bearish' | 'neutral' {
-  if (ratio > 1.25) return 'bearish';
-  if (ratio < 0.85) return 'bullish';
-  return 'neutral';
+function calcKeltnerPosition(closes: number[], highs: number[], lows: number[], period = 20): number {
+  const emas = calcEMA(closes, period);
+  if (emas.length === 0) return 0;
+  const ema = emas[emas.length - 1];
+  const atrs = calcATR(highs, lows, closes, 14);
+  const atr = atrs[atrs.length - 1];
+  const upper = ema + 1.5 * atr;
+  const bandwidth = upper - ema;
+  return bandwidth > 0 ? (closes[closes.length - 1] - ema) / bandwidth : 0;
 }
 
-function getVWAPDirection(deviation: number): 'bullish' | 'bearish' | 'neutral' {
-  if (deviation > 0.1) return 'bullish';
-  if (deviation < -0.1) return 'bearish';
-  return 'neutral';
+// EMA alignment using 9/21/50 instead of 20/50/200 — requires only 50 candles
+function calcEMAAlignment(closes: number[]): { alignment: number; direction: 'bullish' | 'bearish' | 'neutral' } {
+  const ema9 = calcEMA(closes, 9);
+  const ema21 = calcEMA(closes, 21);
+  const ema50 = calcEMA(closes, 50);
+  if (!ema9.length || !ema21.length || !ema50.length) {
+    return { alignment: 0, direction: 'neutral' };
+  }
+  const e9 = ema9[ema9.length - 1];
+  const e21 = ema21[ema21.length - 1];
+  const e50 = ema50[ema50.length - 1];
+  const price = closes[closes.length - 1];
+
+  const bullish = e9 > e21 && e21 > e50 && price > e9;
+  const bearish = e9 < e21 && e21 < e50 && price < e9;
+  const alignment = bullish ? 1 : bearish ? -1 : (e9 > e21 ? 0.5 : -0.5);
+  const direction = bullish ? 'bullish' : bearish ? 'bearish' : 'neutral';
+  return { alignment: (alignment + 1) / 2, direction }; // normalize to 0–1
+}
+
+function calcVWAP(candles: Candle[]): number {
+  let cumVol = 0, cumTP = 0;
+  for (const c of candles) {
+    const tp = (c.high + c.low + c.close) / 3;
+    cumTP += tp * c.volume;
+    cumVol += c.volume;
+  }
+  return cumVol > 0 ? cumTP / cumVol : candles[candles.length - 1]?.close ?? 0;
 }
 
 export function computeSignals(candles: Candle[]): SignalResult[] {
-  if (candles.length < 210) return [];
+  // FIXED: was 210, now 55 (EMA50 is the longest period needed)
+  if (candles.length < 55) return [];
 
   const closes = candles.map(c => c.close);
   const highs = candles.map(c => c.high);
   const lows = candles.map(c => c.low);
-  const volumes = candles.map(c => c.volume);
   const last = closes[closes.length - 1];
 
   const results: SignalResult[] = [];
 
   // 1. RSI(14)
   try {
-    const rsiVals = RSI.calculate({ period: 14, values: closes });
-    const rsi = rsiVals[rsiVals.length - 1];
+    const rsi = calcRSI(closes, 14);
     results.push({
       name: 'RSI (14)',
       value: parseFloat(rsi.toFixed(2)),
       confidence: clamp(Math.abs(rsi - 50) / 50),
-      direction: getRSIDirection(rsi),
+      direction: rsi > 55 ? 'bullish' : rsi < 45 ? 'bearish' : 'neutral',
       category: 'momentum',
     });
-  } catch {
-    // Indicator calculation failed - skip this signal
-  }
+  } catch { /* skip */ }
 
   // 2. MACD(12/26/9)
   try {
-    const macdVals = MACD.calculate({ fastPeriod: 12, slowPeriod: 26, signalPeriod: 9, values: closes, SimpleMAOscillator: false, SimpleMASignal: false });
-    const macd = macdVals[macdVals.length - 1];
-    const histograms = macdVals.slice(-20).map(m => Math.abs(m.histogram ?? 0));
-    const maxHist = Math.max(...histograms, 0.0001);
+    const macd = calcMACD(closes);
+    const recentHists = closes.slice(-30).map((_, i, arr) => {
+      if (i < 26) return 0;
+      return Math.abs(calcMACD(arr.slice(0, i + 1)).histogram);
+    });
+    const maxHist = Math.max(...recentHists, 0.0001);
     results.push({
       name: 'MACD (12/26/9)',
-      value: parseFloat((macd.histogram ?? 0).toFixed(4)),
-      confidence: clamp(Math.abs(macd.histogram ?? 0) / maxHist),
-      direction: getMACDDirection(macd.histogram ?? 0),
+      value: parseFloat(macd.histogram.toFixed(4)),
+      confidence: clamp(Math.abs(macd.histogram) / maxHist),
+      direction: macd.histogram > 0 ? 'bullish' : macd.histogram < 0 ? 'bearish' : 'neutral',
       category: 'momentum',
     });
-  } catch {
-    // Indicator calculation failed - skip this signal
-  }
+  } catch { /* skip */ }
 
   // 3. Stochastic(14)
   try {
-    const stochVals = Stochastic.calculate({ period: 14, signalPeriod: 3, high: highs, low: lows, close: closes });
-    const stoch = stochVals[stochVals.length - 1];
+    const stoch = calcStochastic(highs, lows, closes, 14);
     results.push({
       name: 'Stochastic (14)',
-      value: parseFloat(stoch.k.toFixed(2)),
-      confidence: clamp(Math.abs(stoch.k - 50) / 50),
-      direction: getStochasticDirection(stoch.k),
+      value: parseFloat(stoch.toFixed(2)),
+      confidence: clamp(Math.abs(stoch - 50) / 50),
+      direction: stoch > 60 ? 'bullish' : stoch < 40 ? 'bearish' : 'neutral',
       category: 'momentum',
     });
-  } catch {
-    // Indicator calculation failed - skip this signal
-  }
+  } catch { /* skip */ }
 
   // 4. ROC(10)
   try {
-    const rocVals = ROC.calculate({ period: 10, values: closes });
-    const roc = rocVals[rocVals.length - 1];
-    const maxRoc = Math.max(...rocVals.slice(-20).map(Math.abs), 0.0001);
+    const roc = calcROC(closes, 10);
     results.push({
       name: 'Rate of Change (10)',
       value: parseFloat(roc.toFixed(4)),
-      confidence: clamp(Math.abs(roc) / maxRoc),
-      direction: getROCDirection(roc),
+      confidence: clamp(Math.abs(roc) / 2),
+      direction: roc > 0 ? 'bullish' : roc < 0 ? 'bearish' : 'neutral',
       category: 'momentum',
     });
-  } catch {
-    // Indicator calculation failed - skip this signal
-  }
+  } catch { /* skip */ }
 
   // 5. Bollinger Band Position
   try {
-    const bbVals = BollingerBands.calculate({ period: 20, stdDev: 2, values: closes });
-    const bb = bbVals[bbVals.length - 1];
-    const bandwidth = bb.upper - bb.middle;
-    const pos = bandwidth > 0 ? (last - bb.middle) / bandwidth : 0;
+    const pos = calcBollingerPosition(closes, 20);
     results.push({
       name: 'Bollinger Band',
       value: parseFloat(pos.toFixed(4)),
       confidence: clamp(Math.abs(pos)),
-      direction: getBBDirection(pos),
+      direction: pos > 0.3 ? 'bullish' : pos < -0.3 ? 'bearish' : 'neutral',
       category: 'meanReversion',
     });
-  } catch {
-    // Indicator calculation failed - skip this signal
-  }
+  } catch { /* skip */ }
 
   // 6. Z-Score(20)
   try {
-    const slice20 = closes.slice(-20);
-    const m = mean(slice20);
-    const sd = stdDev(slice20);
-    const zScore = sd > 0 ? (last - m) / sd : 0;
+    const zScore = calcZScore(closes, 20);
     results.push({
       name: 'Z-Score (20)',
       value: parseFloat(zScore.toFixed(3)),
       confidence: clamp(Math.abs(zScore) / 3),
-      direction: getZScoreDirection(zScore),
+      direction: zScore > 0.5 ? 'bullish' : zScore < -0.5 ? 'bearish' : 'neutral',
       category: 'meanReversion',
     });
-  } catch {
-    // Indicator calculation failed - skip this signal
-  }
+  } catch { /* skip */ }
 
   // 7. Keltner Channel
   try {
-    const ema20Vals = EMA.calculate({ period: 20, values: closes });
-    const atrVals = ATR.calculate({ period: 14, high: highs, low: lows, close: closes });
-    const ema20 = ema20Vals[ema20Vals.length - 1];
-    const atr14 = atrVals[atrVals.length - 1];
-    const upper = ema20 + 2 * atr14;
-    const bandwidth = upper - ema20;
-    const pos = bandwidth > 0 ? (last - ema20) / bandwidth : 0;
+    const pos = calcKeltnerPosition(closes, highs, lows, 20);
     results.push({
       name: 'Keltner Channel',
       value: parseFloat(pos.toFixed(4)),
       confidence: clamp(Math.abs(pos)),
-      direction: getBBDirection(pos),
+      direction: pos > 0.3 ? 'bullish' : pos < -0.3 ? 'bearish' : 'neutral',
       category: 'meanReversion',
     });
-  } catch {
-    // Indicator calculation failed - skip this signal
-  }
+  } catch { /* skip */ }
 
-  // 8. EMA Alignment (20/50/200)
+  // 8. EMA Alignment (9/21/50) — FIXED: was 20/50/200 requiring 200+ candles
   try {
-    const ema20 = EMA.calculate({ period: 20, values: closes });
-    const ema50 = EMA.calculate({ period: 50, values: closes });
-    const ema200 = EMA.calculate({ period: 200, values: closes });
-    const e20 = ema20[ema20.length - 1];
-    const e50 = ema50[ema50.length - 1];
-    const e200 = ema200[ema200.length - 1];
-    const bullishAlign = e20 > e50 && e50 > e200;
-    const bearishAlign = e20 < e50 && e50 < e200;
-    const twoAligned = (e20 > e50) === (e50 > e200);
+    const { alignment, direction } = calcEMAAlignment(closes);
+    const e9 = calcEMA(closes, 9);
+    const e21 = calcEMA(closes, 21);
+    const pctDiff = e9.length && e21.length ? (e9[e9.length - 1] - e21[e21.length - 1]) / e21[e21.length - 1] * 100 : 0;
     results.push({
       name: 'EMA Alignment',
-      value: parseFloat(((e20 - e50) / e50 * 100).toFixed(4)),
-      confidence: bullishAlign || bearishAlign ? 1.0 : twoAligned ? 0.5 : 0.0,
-      direction: getEMADirection(e20, e50, e200),
+      value: parseFloat(pctDiff.toFixed(4)),
+      confidence: clamp(Math.abs(pctDiff) * 10),
+      direction,
       category: 'trend',
     });
-  } catch {
-    // Indicator calculation failed - skip this signal
-  }
+  } catch { /* skip */ }
 
   // 9. ATR Ratio
   try {
-    const atrVals = ATR.calculate({ period: 14, high: highs, low: lows, close: closes });
-    const currentATR = atrVals[atrVals.length - 1];
-    const meanATR20 = mean(atrVals.slice(-20));
-    const ratio = meanATR20 > 0 ? currentATR / meanATR20 : 1;
+    const atrs = calcATR(highs, lows, closes, 14);
+    const currentATR = atrs[atrs.length - 1];
+    const meanATR = mean(atrs.slice(-20));
+    const ratio = meanATR > 0 ? currentATR / meanATR : 1;
     results.push({
       name: 'ATR Ratio',
       value: parseFloat(ratio.toFixed(3)),
       confidence: ratio > 1 ? clamp(ratio - 1) : 0,
-      direction: getATRDirection(ratio),
+      direction: ratio > 1.25 ? 'bearish' : ratio < 0.85 ? 'bullish' : 'neutral',
       category: 'trend',
     });
-  } catch {
-    // Indicator calculation failed - skip this signal
-  }
+  } catch { /* skip */ }
 
   // 10. VWAP Deviation
   try {
-    const vwap = computeVWAP(candles.slice(-96));
+    const vwap = calcVWAP(candles.slice(-96));
     const deviation = vwap > 0 ? (last - vwap) / vwap * 100 : 0;
     results.push({
       name: 'VWAP Deviation',
       value: parseFloat(deviation.toFixed(4)),
       confidence: clamp(Math.abs(deviation) / 0.5),
-      direction: getVWAPDirection(deviation),
+      direction: deviation > 0.1 ? 'bullish' : deviation < -0.1 ? 'bearish' : 'neutral',
       category: 'trend',
     });
-  } catch {
-    // Indicator calculation failed - skip this signal
-  }
+  } catch { /* skip */ }
 
   return results;
 }
 
 export function getATRRatio(candles: Candle[]): number {
-  if (candles.length < 35) return 1;
+  if (candles.length < 20) return 1;
   try {
     const highs = candles.map(c => c.high);
     const lows = candles.map(c => c.low);
     const closes = candles.map(c => c.close);
-    const atrVals = ATR.calculate({ period: 14, high: highs, low: lows, close: closes });
-    const current = atrVals[atrVals.length - 1];
-    const m = atrVals.slice(-20).reduce((a, b) => a + b, 0) / 20;
+    const atrs = calcATR(highs, lows, closes, 14);
+    const current = atrs[atrs.length - 1];
+    const m = mean(atrs.slice(-20));
     return m > 0 ? current / m : 1;
   } catch {
     return 1;

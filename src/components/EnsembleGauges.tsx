@@ -1,6 +1,7 @@
-// /src/components/EnsembleGauges.tsx
+// /src/components/EnsembleGauges.tsx — FIXED
+// REMOVED: useEffect that dispatched auto-analyze events on every ensemble/edge change
+// This was flooding the Groq API on every signal update → rate limit errors
 'use client';
-import { useEffect } from 'react';
 import GaugeChart from './GaugeChart';
 import { useSignalStore } from '@/stores/signalStore';
 import { useKalshiStore } from '@/stores/kalshiStore';
@@ -36,20 +37,7 @@ export default function EnsembleGauges() {
   const { ensembleProbability, regime } = useSignalStore();
   const { expectedValue, edge } = useKalshiStore();
 
-  // Auto-analyze when ensemble probability or edge changes significantly
-  useEffect(() => {
-    if (ensembleProbability > 0) {
-      // Trigger auto-analysis when ensemble probability updates
-      if (typeof globalThis !== 'undefined' && globalThis.window) {
-        const context = `Ensemble analysis updated. Probability: ${ensembleProbability.toFixed(1)}%, Edge: ${edge.toFixed(1)}%, EV: ${expectedValue.toFixed(2)}%. Regime: ${regime.trend} ${regime.volatility}. Directive: ${getDirective(ensembleProbability, expectedValue).text}.`;
-        globalThis.window.dispatchEvent(new CustomEvent('auto-analyze', { detail: context }));
-      }
-    }
-  }, [ensembleProbability, edge, expectedValue, regime]);
-
   const directive = getDirective(ensembleProbability, expectedValue);
-
-  // Gauge 2 shows edge-adjusted view: blends ensemble with EV signal
   const evAdjusted = Math.min(100, Math.max(0, ensembleProbability + (expectedValue > 0 ? 3 : -3)));
 
   return (
@@ -69,7 +57,6 @@ export default function EnsembleGauges() {
         />
       </div>
 
-      {/* Regime badge */}
       <div className="flex gap-2 mt-1">
         <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-[#1e1e2e] text-[#666680]">
           {regime.trend.toUpperCase()}
