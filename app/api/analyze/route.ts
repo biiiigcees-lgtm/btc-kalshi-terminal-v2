@@ -139,18 +139,20 @@ export async function POST(req: NextRequest) {
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasGroq = !!process.env.GROQ_API_KEY;
 
-  console.log('Environment check:', {
+  const debugInfo = {
     hasAnthropic,
     hasGroq,
     anthropicKeyLength: process.env.ANTHROPIC_API_KEY?.length,
     groqKeyLength: process.env.GROQ_API_KEY?.length,
     nodeEnv: process.env.NODE_ENV,
-  });
+  };
+
+  console.log('Environment check:', debugInfo);
 
   if (!hasAnthropic && !hasGroq) {
     return NextResponse.json({
       error: 'No AI key configured. Add ANTHROPIC_API_KEY or GROQ_API_KEY in Vercel → Settings → Environment Variables, then redeploy.',
-      debug: { hasAnthropic, hasGroq, nodeEnv: process.env.NODE_ENV }
+      debug: debugInfo
     }, { status: 500 });
   }
 
