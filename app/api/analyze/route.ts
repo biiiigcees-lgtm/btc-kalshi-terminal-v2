@@ -5,7 +5,7 @@ import { generateObject } from 'ai';
 import { groq } from '@ai-sdk/groq';
 import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
-import { SYSTEM_PROMPT } from '../../../src/constants/systemPrompt';
+import { SYSTEM_PROMPT } from '../../src/constants/systemPrompt';
 
 // Simple in-memory rate limiter: 1 request per 10 seconds per IP
 const rateLimiter = new Map<string, number>();
