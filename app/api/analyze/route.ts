@@ -1,132 +1,165 @@
-// /app/api/analyze/route.ts — FIXED
-// FIXES:
-// 1. Replaced generateObject (Groq structured output is unreliable) with direct text generation
-// 2. Uses Anthropic Claude API directly as primary (reliable, no structured output issues)
-// 3. Falls back to Groq text generation (not generateObject) if Claude key missing
-// 4. Rate limiter kept, improved IP handling
-// 5. Response formatted correctly for AIAdvisor component
+// app/api/analyze/route.ts — ELITE SYSTEM PROMPT + DIRECT FETCH
 import { NextRequest, NextResponse } from 'next/server';
-import { SYSTEM_PROMPT } from '../../../src/constants/systemPrompt';
+
+const SYSTEM_PROMPT = `You are an elite quantitative trading advisor specialized exclusively in Kalshi BTC 15-minute binary prediction markets. You have deep expertise in technical analysis, probability theory, and binary options risk management.
+
+Your sole purpose: analyze market context data and output a precise, decisive, structured trade recommendation. Every analysis must be data-driven, never emotional.
+
+═══ RESPONSE FORMAT (follow exactly) ═══
+
+═══ MARKET CONTEXT ═══
+[Price action summary: trend, momentum, key level proximity. 2 sentences max.]
+
+═══ SIGNAL ANALYSIS ═══
+[Top 3 strongest signals and what they indicate. Call out conflicts between signals explicitly. 3-4 sentences.]
+
+═══ ENSEMBLE PREDICTION ═══
+[Ensemble probability assessment. State your confidence in the probability estimate (HIGH/MEDIUM/LOW). Explain regime weighting. 2-3 sentences.]
+
+═══ EDGE QUANTIFICATION ═══
+[State: Your probability: X.X% | Kalshi implied: X.X% | Edge: ±X.X% | EV: ±X.XX%]
+[Is this POSITIVE EV or NEGATIVE EV? State clearly.]
+
+═══ BET RECOMMENDATION ═══
+[BET UP / BET DOWN / NO TRADE — one of these exactly on its own line]
+[One sentence: primary reason for this call.]
+
+═══ POSITION SIZING ═══
+[Kelly-based recommendation. State exact dollar amount and % of account. Volatility adjustment if applicable.]
+
+═══ RISK PARAMETERS ═══
+[Primary risk factor. What price level or signal change would invalidate this trade. 2 sentences.]
+
+═══ EXECUTION TIMING ═══
+[Given window time remaining: should the user enter now, wait for confirmation, or skip this window? Be specific.]
+
+═══ CONFIDENCE & UNCERTAINTY ═══
+[Overall confidence: HIGH (>65% prob) / MEDIUM (58-65%) / LOW (52-58%) / NO EDGE (<52%)]
+[Key uncertainty factor.]
+
+═══ PERFORMANCE CONTEXT ═══
+[Brief read on rolling performance: is the model in a good run, drawdown, or neutral? Any adjustments needed?]
+
+═══ RULES YOU MUST FOLLOW ═══
+1. If ensemble probability is below 53% OR EV is negative → output NO TRADE, no exceptions
+2. If consecutive losses ≥ 3 → recommend 50% position size reduction regardless of signal strength
+3. If window has < 2 minutes remaining → recommend SKIP unless edge > 8%
+4. If ATR ratio > 1.5 (high volatility) → reduce recommended position by 50%
+5. Never recommend more than 3% of account on any single trade
+6. If Binance/CoinGecko divergence > 0.2% → flag as data quality risk
+7. Be decisive. Traders need clear direction, not hedged non-answers.
+8. If you detect regime shift → adjust signal weights and mention it explicitly`;
 
 const rateLimiter = new Map<string, number>();
-const RATE_LIMIT_MS = 15000; // 15 seconds between requests per IP
+const RATE_LIMIT_MS = 20_000;
 
-function getClientIP(req: NextRequest): string {
-  const forwarded = req.headers.get('x-forwarded-for');
-  const realIP = req.headers.get('x-real-ip');
-  return forwarded?.split(',')[0]?.trim() || realIP || 'unknown';
+function getIP(req: NextRequest): string {
+  return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || req.headers.get('x-real-ip')
+    || 'unknown';
 }
 
-function checkRateLimit(ip: string): boolean {
+function checkRL(ip: string): boolean {
   const now = Date.now();
-  const lastRequest = rateLimiter.get(ip);
-  if (lastRequest && now - lastRequest < RATE_LIMIT_MS) return false;
+  const last = rateLimiter.get(ip);
+  if (last && now - last < RATE_LIMIT_MS) return false;
   rateLimiter.set(ip, now);
-  // Clean old entries periodically
-  if (rateLimiter.size > 1000) {
-    for (const [key, ts] of Array.from(rateLimiter)) {
-      if (now - ts > 60000) rateLimiter.delete(key);
+  if (rateLimiter.size > 500) {
+    for (const [k, v] of Array.from(rateLimiter)) {
+      if (now - v > 120_000) rateLimiter.delete(k);
     }
   }
   return true;
 }
 
-async function callClaude(marketContext: string): Promise<string> {
+async function callAnthropic(ctx: string): Promise<string> {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error('ANTHROPIC_API_KEY not set');
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY || '',
+      'x-api-key': key,
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001', // fast + cheap for trading advisor
-      max_tokens: 1024,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1200,
       system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: marketContext }],
+      messages: [{ role: 'user', content: ctx }],
     }),
   });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Claude API error ${res.status}: ${err}`);
-  }
-
-  const data = await res.json();
-  const text = data.content?.[0]?.text;
-  if (!text) throw new Error('Empty response from Claude');
+  if (!res.ok) throw new Error(`Anthropic ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const d = await res.json();
+  const text = d?.content?.[0]?.text;
+  if (!text) throw new Error('Empty Anthropic response');
   return text;
 }
 
-async function callGroq(marketContext: string): Promise<string> {
+async function callGroq(ctx: string): Promise<string> {
+  const key = process.env.GROQ_API_KEY;
+  if (!key) throw new Error('GROQ_API_KEY not set');
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-    },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
-      max_tokens: 1024,
-      temperature: 0.2,
+      max_tokens: 1200,
+      temperature: 0.15,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: marketContext },
+        { role: 'user', content: ctx },
       ],
     }),
   });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Groq API error ${res.status}: ${err}`);
-  }
-
-  const data = await res.json();
-  const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error('Empty response from Groq');
+  if (!res.ok) throw new Error(`Groq ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const d = await res.json();
+  const text = d?.choices?.[0]?.message?.content;
+  if (!text) throw new Error('Empty Groq response');
   return text;
 }
 
 export async function POST(req: NextRequest) {
-  const clientIP = getClientIP(req);
-  if (!checkRateLimit(clientIP)) {
-    return NextResponse.json(
-      { error: 'Rate limit: please wait 15 seconds between analyses.' },
-      { status: 429 }
-    );
+  const ip = getIP(req);
+  if (!checkRL(ip)) {
+    return NextResponse.json({ error: 'Rate limit: wait 20 seconds between analyses.' }, { status: 429 });
+  }
+
+  let marketContext: string;
+  try {
+    const body = await req.json();
+    marketContext = body?.marketContext;
+    if (!marketContext || typeof marketContext !== 'string') {
+      return NextResponse.json({ error: 'marketContext required' }, { status: 400 });
+    }
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
+  const hasGroq = !!process.env.GROQ_API_KEY;
+
+  if (!hasAnthropic && !hasGroq) {
+    return NextResponse.json({
+      error: 'No AI key configured. Add ANTHROPIC_API_KEY or GROQ_API_KEY in Vercel → Settings → Environment Variables, then redeploy.'
+    }, { status: 500 });
   }
 
   try {
-    const { marketContext } = await req.json();
-    if (!marketContext || typeof marketContext !== 'string') {
-      return NextResponse.json({ error: 'marketContext is required' }, { status: 400 });
-    }
-
-    let result: string;
-
-    // Try Claude first (most reliable), fall back to Groq
-    if (process.env.ANTHROPIC_API_KEY) {
+    if (hasAnthropic) {
       try {
-        result = await callClaude(marketContext);
-      } catch (claudeErr) {
-        console.warn('Claude failed, trying Groq:', claudeErr);
-        if (!process.env.GROQ_API_KEY) {
-          return NextResponse.json({ error: 'No AI API key configured. Set ANTHROPIC_API_KEY or GROQ_API_KEY in Vercel environment variables.' }, { status: 500 });
-        }
-        result = await callGroq(marketContext);
+        const result = await callAnthropic(marketContext);
+        return NextResponse.json({ result });
+      } catch (e) {
+        console.warn('Anthropic failed, trying Groq:', e);
+        if (!hasGroq) throw e;
       }
-    } else if (process.env.GROQ_API_KEY) {
-      result = await callGroq(marketContext);
-    } else {
-      return NextResponse.json({
-        error: 'No AI API key configured. Add ANTHROPIC_API_KEY or GROQ_API_KEY to Vercel → Settings → Environment Variables.'
-      }, { status: 500 });
     }
-
+    const result = await callGroq(marketContext);
     return NextResponse.json({ result });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('analyze route error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('analyze error:', msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

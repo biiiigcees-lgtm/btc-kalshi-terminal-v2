@@ -1,372 +1,261 @@
-// /src/components/PaperTradingPanel.tsx
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { usePaperTradeStore } from '../stores/paperTradeStore';
 import { usePriceStore } from '../stores/priceStore';
 import { useKalshiStore } from '../stores/kalshiStore';
 import { useSignalStore } from '../stores/signalStore';
-import type { PaperTrade } from '../stores/paperTradeStore';
+import { lastAIDirective, lastAIAnalysisTime } from './AIAdvisor';
 
-interface TradeConfirmationModalProps {
-  readonly pendingDirection: 'UP' | 'DOWN' | null;
-  readonly recommendedBet: number;
-  readonly edge: number;
-  readonly spotPrice: number | undefined;
-  readonly isExecuting: boolean;
-  readonly onCancel: () => void;
-  readonly onConfirm: () => void;
-}
-
-function TradeConfirmationModal({ pendingDirection, recommendedBet, edge, spotPrice, isExecuting, onCancel, onConfirm }: TradeConfirmationModalProps) {
+function StatBox({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="absolute inset-0 bg-[#0a0a0f]/90 flex items-center justify-center z-50">
-      <div className="bg-[#1e1e2e] border border-[#333350] rounded-lg p-4 max-w-xs w-full mx-4">
-        <div className="text-sm font-bold text-[#e8e8f0] mb-3">Confirm Trade</div>
-        <div className="space-y-2 text-xs text-[#8888aa] mb-4">
-          <div className="flex justify-between">
-            <span>Direction:</span>
-            <span className={pendingDirection === 'UP' ? 'text-[#00ff88]' : 'text-[#ff4466]'}>
-              {pendingDirection}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span>Size:</span>
-            <span>${recommendedBet.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Edge:</span>
-            <span className="text-[#00ff88]">{edge.toFixed(2)}%</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Entry Price:</span>
-            <span>${spotPrice?.toLocaleString()}</span>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={onCancel}
-            disabled={isExecuting}
-            className="flex-1 py-2 text-xs rounded bg-[#333350] text-[#e8e8f0] hover:bg-[#444460] disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={isExecuting}
-            className="flex-1 py-2 text-xs rounded bg-[#4488ff] text-white hover:bg-[#66aaff] disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {isExecuting ? (
-              <>
-                <span className="animate-spin">⟳</span>
-                <span>Confirming...</span>
-              </>
-            ) : 'Confirm'}
-          </button>
-        </div>
-      </div>
+    <div className="bg-[#0a0a14] border border-[#1a1a2a] rounded p-2">
+      <div className="text-[9px] font-mono text-[#444460] uppercase tracking-wider mb-0.5">{label}</div>
+      <div className="text-sm font-bold font-mono" style={{ color: color || '#e8e8f0' }}>{value}</div>
     </div>
-  );
-}
-
-interface ActiveTradeDisplayProps {
-  readonly activeTrade: PaperTrade;
-  readonly onClose: () => void;
-}
-
-function ActiveTradeDisplay({ activeTrade, onClose }: ActiveTradeDisplayProps) {
-  return (
-    <div className="m-2 p-3 bg-[#1e1e2e] rounded border border-[#333350]">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-bold text-[#e8e8f0]">ACTIVE TRADE</span>
-        <span className={`text-xs font-bold ${activeTrade.direction === 'UP' ? 'text-[#00ff88]' : 'text-[#ff4466]'}`}>
-          {activeTrade.direction === 'UP' ? '▲ UP' : '▼ DOWN'}
-        </span>
-      </div>
-      <div className="grid grid-cols-2 gap-2 text-[10px] text-[#8888aa] mb-3">
-        <div>Entry: ${activeTrade.entryPrice.toLocaleString()}</div>
-        <div>Size: ${activeTrade.size.toLocaleString()}</div>
-        <div>Edge: {activeTrade.metadata.edge.toFixed(2)}%</div>
-        <div>EV: {activeTrade.metadata.expectedValue.toFixed(3)}</div>
-      </div>
-      <button
-        onClick={onClose}
-        className="w-full py-2 text-xs font-bold rounded bg-[#ff4466] text-white hover:bg-[#ff6688] transition-colors"
-      >
-        CLOSE POSITION
-      </button>
-    </div>
-  );
-}
-
-interface TradeEntryButtonsProps {
-  readonly canTrade: boolean;
-  readonly optimisticTrade: { direction: 'UP' | 'DOWN'; timestamp: number } | null;
-  readonly onEnterTrade: (direction: 'UP' | 'DOWN') => void;
-}
-
-function TradeEntryButtons({ canTrade, optimisticTrade, onEnterTrade }: TradeEntryButtonsProps) {
-  return (
-    <div className="grid grid-cols-2 gap-2 p-2">
-      <button
-        onClick={() => onEnterTrade('UP')}
-        disabled={!canTrade}
-        className={`py-3 text-sm font-bold rounded transition-all relative overflow-hidden ${
-          canTrade 
-            ? 'bg-[#00ff88] text-[#0a0a0f] hover:bg-[#00ffaa]' 
-            : 'bg-[#1e1e2e] text-[#444460] cursor-not-allowed'
-        }`}
-      >
-        {optimisticTrade?.direction === 'UP' && (
-          <span className="absolute inset-0 flex items-center justify-center bg-[#00ff88]">
-            <span className="animate-pulse">EXECUTING...</span>
-          </span>
-        )}
-        <span className={optimisticTrade?.direction === 'UP' ? 'opacity-0' : ''}>▲ UP</span>
-      </button>
-      <button
-        onClick={() => onEnterTrade('DOWN')}
-        disabled={!canTrade}
-        className={`py-3 text-sm font-bold rounded transition-all relative overflow-hidden ${
-          canTrade 
-            ? 'bg-[#ff4466] text-white hover:bg-[#ff6688]' 
-            : 'bg-[#1e1e2e] text-[#444460] cursor-not-allowed'
-        }`}
-      >
-        {optimisticTrade?.direction === 'DOWN' && (
-          <span className="absolute inset-0 flex items-center justify-center bg-[#ff4466]">
-            <span className="animate-pulse">EXECUTING...</span>
-          </span>
-        )}
-        <span className={optimisticTrade?.direction === 'DOWN' ? 'opacity-0' : ''}>▼ DOWN</span>
-      </button>
-    </div>
-  );
-}
-
-interface PerformanceStatsProps {
-  readonly totalTrades: number;
-  readonly winRate: number;
-  readonly profitFactor: number;
-  readonly maxDrawdown: number;
-}
-
-function PerformanceStats({ totalTrades, winRate, profitFactor, maxDrawdown }: PerformanceStatsProps) {
-  return (
-    <>
-      <div className="text-[9px] text-[#666680] uppercase tracking-widest mb-2">Performance</div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="bg-[#1e1e2e] rounded p-2">
-          <div className="text-[9px] text-[#666680]">Trades</div>
-          <div className="text-sm font-bold text-[#e8e8f0]">{totalTrades}</div>
-        </div>
-        <div className="bg-[#1e1e2e] rounded p-2">
-          <div className="text-[9px] text-[#666680]">Win Rate</div>
-          <div className={`text-sm font-bold ${winRate >= 50 ? 'text-[#00ff88]' : 'text-[#ff4466]'}`}>
-            {winRate.toFixed(1)}%
-          </div>
-        </div>
-        <div className="bg-[#1e1e2e] rounded p-2">
-          <div className="text-[9px] text-[#666680]">Profit Factor</div>
-          <div className={`text-sm font-bold ${profitFactor >= 1.5 ? 'text-[#00ff88]' : 'text-[#ffaa00]'}`}>
-            {profitFactor.toFixed(2)}
-          </div>
-        </div>
-        <div className="bg-[#1e1e2e] rounded p-2">
-          <div className="text-[9px] text-[#666680]">Max DD</div>
-          <div className={`text-sm font-bold ${maxDrawdown <= 0.1 ? 'text-[#00ff88]' : 'text-[#ff4466]'}`}>
-            {(maxDrawdown * 100).toFixed(1)}%
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-interface RecentTradesListProps {
-  readonly trades: PaperTrade[];
-}
-
-function RecentTradesList({ trades }: RecentTradesListProps) {
-  if (trades.length === 0) return null;
-  
-  return (
-    <>
-      <div className="text-[9px] text-[#666680] uppercase tracking-widest mt-3 mb-2">Recent Trades</div>
-      <div className="space-y-1 max-h-24 overflow-y-auto">
-        {trades.slice(-5).reverse().map((trade) => (
-          <div key={trade.id} className="flex items-center justify-between bg-[#1e1e2e] rounded px-2 py-1">
-            <div className="flex items-center gap-2">
-              <span className={trade.direction === 'UP' ? 'text-[#00ff88]' : 'text-[#ff4466]'}>
-                {trade.direction === 'UP' ? '▲' : '▼'}
-              </span>
-              <span className="text-[9px] text-[#8888aa]">
-                {new Date(trade.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            </div>
-            <span className={`text-xs font-bold ${(trade.pnl || 0) >= 0 ? 'text-[#00ff88]' : 'text-[#ff4466]'}`}>
-              {(trade.pnl || 0) >= 0 ? '+' : ''}{(trade.pnl || 0).toFixed(0)}
-            </span>
-          </div>
-        ))}
-      </div>
-    </>
   );
 }
 
 export default function PaperTradingPanel() {
-  const [showConfirmation, setShowConfirmation] = useState(false);
-  const [pendingDirection, setPendingDirection] = useState<'UP' | 'DOWN' | null>(null);
+  const [autoMode, setAutoMode] = useState(true);
+  const [lastAutoAction, setLastAutoAction] = useState<string>('');
   const [isExecuting, setIsExecuting] = useState(false);
-  const [optimisticTrade, setOptimisticTrade] = useState<{ direction: 'UP' | 'DOWN'; timestamp: number } | null>(null);
-  
-  const { 
-    virtualBalance, 
-    activeTrade, 
-    trades,
-    totalTrades,
-    winRate,
-    profitFactor,
-    maxDrawdown,
-    enterTrade,
-    exitTrade,
-    resetAccount,
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [pendingDir, setPendingDir] = useState<'UP' | 'DOWN' | null>(null);
+  const lastExecutedAnalysis = useRef(0);
+
+  const {
+    virtualBalance, activeTrade, trades,
+    totalTrades, winRate, profitFactor, maxDrawdown,
+    enterTrade, exitTrade, resetAccount,
   } = usePaperTradeStore();
-  
+
   const { spotPrice } = usePriceStore();
   const { recommendedBet, edge, expectedValue } = useKalshiStore();
   const { ensembleProbability, regime } = useSignalStore();
 
-  const canTrade = edge > 2 && expectedValue > 0 && !activeTrade && !isExecuting;
+  const canTrade = edge > 2 && expectedValue > 0 && !activeTrade && !isExecuting && spotPrice > 0;
 
-  const handleEnterTrade = (direction: 'UP' | 'DOWN') => {
+  // AI Auto-trading: watch lastAIAnalysisTime and execute when AI gives directive
+  useEffect(() => {
+    if (!autoMode) return;
+    if (!lastAIDirective) return;
+    if (lastAIAnalysisTime <= lastExecutedAnalysis.current) return;
+    if (lastAIDirective === 'NO TRADE') {
+      lastExecutedAnalysis.current = lastAIAnalysisTime;
+      setLastAutoAction(`NO TRADE — AI held at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+      return;
+    }
     if (!canTrade) return;
-    setPendingDirection(direction);
-    setShowConfirmation(true);
-  };
 
-  const handleCancelConfirmation = () => {
-    setShowConfirmation(false);
-    setPendingDirection(null);
-  };
+    lastExecutedAnalysis.current = lastAIAnalysisTime;
+    const dir = lastAIDirective === 'BET UP' ? 'UP' : 'DOWN';
+    executeAITrade(dir);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastAIAnalysisTime, autoMode, canTrade]);
 
-  const confirmTrade = async () => {
-    if (!pendingDirection || !spotPrice) return;
-    
+  async function executeAITrade(dir: 'UP' | 'DOWN') {
+    if (!spotPrice || isExecuting) return;
     setIsExecuting(true);
-    setShowConfirmation(false);
-    
-    // Optimistic update - show immediate feedback
-    setOptimisticTrade({ direction: pendingDirection, timestamp: Date.now() });
-    
-    const tradeSize = recommendedBet > 0 ? recommendedBet : Math.min(100, virtualBalance * 0.02);
-    
-    try {
-      // Simulate network delay for realistic feel
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      enterTrade({
-        direction: pendingDirection,
-        entryPrice: spotPrice,
-        size: tradeSize,
-        windowId: `window-${Date.now()}`,
-        metadata: {
-          ensembleProbability,
-          edge,
-          expectedValue,
-          regime: `${regime.trend}-${regime.volatility}`,
-          targetPrice: null,
-        },
-      });
-    } catch (error) {
-      console.error('Trade execution failed:', error);
-    } finally {
-      setIsExecuting(false);
-      setOptimisticTrade(null);
-      setPendingDirection(null);
-    }
-  };
+    await new Promise(r => setTimeout(r, 400));
+    const size = recommendedBet > 0 ? recommendedBet : Math.min(50, virtualBalance * 0.02);
+    enterTrade({
+      direction: dir,
+      entryPrice: spotPrice,
+      size,
+      windowId: `ai-auto-${Date.now()}`,
+      metadata: { ensembleProbability, edge, expectedValue, regime: `${regime.trend}-${regime.volatility}`, targetPrice: null },
+    });
+    setLastAutoAction(`AI AUTO ${dir} — $${size.toFixed(0)} @ $${spotPrice.toLocaleString()} — ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+    setIsExecuting(false);
+  }
 
-  const handleCloseTrade = async () => {
-    if (activeTrade && spotPrice && !isExecuting) {
-      setIsExecuting(true);
-      
-      try {
-        // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 200));
-        exitTrade({
-          exitPrice: spotPrice,
-          windowId: `window-${Date.now()}`,
-        });
-      } catch (error) {
-        console.error('Trade close failed:', error);
-      } finally {
-        setIsExecuting(false);
-      }
-    }
-  };
+  function manualTrade(dir: 'UP' | 'DOWN') {
+    if (!canTrade) return;
+    setPendingDir(dir);
+    setShowConfirm(true);
+  }
 
-  const formatCurrency = (n: number) => 
-    n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  async function confirmTrade() {
+    if (!pendingDir) return;
+    setShowConfirm(false);
+    setIsExecuting(true);
+    await new Promise(r => setTimeout(r, 300));
+    const size = recommendedBet > 0 ? recommendedBet : Math.min(50, virtualBalance * 0.02);
+    enterTrade({
+      direction: pendingDir,
+      entryPrice: spotPrice,
+      size,
+      windowId: `manual-${Date.now()}`,
+      metadata: { ensembleProbability, edge, expectedValue, regime: `${regime.trend}-${regime.volatility}`, targetPrice: null },
+    });
+    setIsExecuting(false);
+    setPendingDir(null);
+  }
+
+  function closePosition() {
+    if (!activeTrade || !spotPrice) return;
+    exitTrade({ exitPrice: spotPrice, windowId: `close-${Date.now()}` });
+    setLastAutoAction(`Closed @ $${spotPrice.toLocaleString()} — ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+  }
+
+  const recentTrades = [...trades].reverse().slice(0, 5);
 
   return (
-    <div className="flex flex-col h-full bg-[#0d0d14] font-mono">
+    <div className="flex flex-col h-full bg-[#07070f] font-mono">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[#1e1e2e]">
-        <span className="text-[10px] font-display text-[#666680] uppercase tracking-widest">
-          Paper Trading
-        </span>
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[#1a1a2a] flex-shrink-0">
+        <span className="text-[9px] font-mono text-[#444460] uppercase tracking-[0.2em]">EXECUTION</span>
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-bold ${virtualBalance >= 10000 ? 'text-[#00ff88]' : 'text-[#ff4466]'}`}>
-            {formatCurrency(virtualBalance)}
+          <span className={`text-sm font-bold font-mono ${virtualBalance >= 10000 ? 'text-[#00ff88]' : virtualBalance >= 8000 ? 'text-[#ffaa00]' : 'text-[#ff4466]'}`}>
+            ${virtualBalance.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
           </span>
+          <button onClick={resetAccount} className="text-[9px] text-[#333350] hover:text-[#666680] transition-colors">↺</button>
+        </div>
+      </div>
+
+      {/* AI Auto mode toggle */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[#1a1a2a] flex-shrink-0">
+        <div className="flex items-center gap-2">
           <button
-            onClick={resetAccount}
-            className="text-[9px] text-[#666680] hover:text-[#e8e8f0] transition-colors"
-            title="Reset to $10,000"
+            onClick={() => setAutoMode(a => !a)}
+            className={`relative w-8 h-4 rounded-full transition-colors ${autoMode ? 'bg-[#4488ff]' : 'bg-[#1a1a2a]'}`}
           >
-            ↺ Reset
+            <motion.div
+              animate={{ x: autoMode ? 16 : 2 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+              className="absolute top-0.5 w-3 h-3 rounded-full bg-white"
+            />
           </button>
+          <span className={`text-[10px] font-mono ${autoMode ? 'text-[#4488ff]' : 'text-[#444460]'}`}>
+            {autoMode ? 'AI AUTO-TRADE ON' : 'MANUAL MODE'}
+          </span>
         </div>
+        {autoMode && (
+          <motion.div animate={{ opacity: [1, 0.4, 1] }} transition={{ repeat: Infinity, duration: 2 }}
+            className="text-[9px] text-[#4488ff] font-mono">● LIVE</motion.div>
+        )}
       </div>
 
-      {/* Active Trade */}
-      {activeTrade ? (
-        <ActiveTradeDisplay activeTrade={activeTrade} onClose={handleCloseTrade} />
-      ) : (
-        <TradeEntryButtons canTrade={canTrade} optimisticTrade={optimisticTrade} onEnterTrade={handleEnterTrade} />
-      )}
+      {/* Last AI action */}
+      <AnimatePresence>
+        {lastAutoAction && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+            className="px-3 py-1.5 border-b border-[#1a1a2a] flex-shrink-0 overflow-hidden">
+            <div className="text-[9px] font-mono text-[#444460] truncate">⟳ {lastAutoAction}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Trade Restriction Message */}
-      {!canTrade && !activeTrade && !isExecuting && (
-        <div className="px-3 py-2 text-[9px] text-[#ffaa00] text-center">
-          {edge <= 2 && 'Edge must be > 2% to trade'}
-          {expectedValue <= 0 && expectedValue !== 0 && 'EV must be positive'}
-        </div>
-      )}
-      {isExecuting && (
-        <div className="px-3 py-2 text-[9px] text-[#4488ff] text-center animate-pulse">
-          Processing trade...
-        </div>
-      )}
+      <div className="flex-1 overflow-y-auto min-h-0 p-2 space-y-2">
+        {/* Active trade */}
+        <AnimatePresence>
+          {activeTrade && (
+            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+              className={`p-3 rounded border ${activeTrade.direction === 'UP' ? 'bg-[#00ff8808] border-[#00ff8833]' : 'bg-[#ff446608] border-[#ff446633]'}`}>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[10px] font-bold font-mono text-[#e8e8f0]">ACTIVE TRADE</span>
+                <span className={`text-sm font-bold font-mono ${activeTrade.direction === 'UP' ? 'text-[#00ff88]' : 'text-[#ff4466]'}`}>
+                  {activeTrade.direction === 'UP' ? '▲ UP' : '▼ DOWN'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono text-[#666680] mb-3">
+                <div>Entry <span className="text-[#e8e8f0]">${activeTrade.entryPrice.toLocaleString()}</span></div>
+                <div>Size <span className="text-[#e8e8f0]">${activeTrade.size.toFixed(0)}</span></div>
+                <div>Edge <span className="text-[#00ff88]">{activeTrade.metadata.edge.toFixed(1)}%</span></div>
+                <div>EV <span className="text-[#00ff88]">{(activeTrade.metadata.expectedValue * 100).toFixed(2)}%</span></div>
+              </div>
+              <button onClick={closePosition}
+                className="w-full py-1.5 text-xs font-bold rounded bg-[#ff4466] text-white hover:bg-[#ff6688] transition-colors active:scale-95">
+                CLOSE POSITION
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* Stats */}
-      <div className="flex-1 px-3 py-2">
-        <PerformanceStats totalTrades={totalTrades} winRate={winRate} profitFactor={profitFactor} maxDrawdown={maxDrawdown} />
-        <RecentTradesList trades={trades} />
+        {/* Manual trade buttons (shown when no active trade) */}
+        {!activeTrade && (
+          <div className="space-y-1.5">
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => manualTrade('UP')} disabled={!canTrade}
+                className={`py-3 text-sm font-bold rounded transition-all active:scale-95 ${canTrade ? 'bg-[#00ff88] text-[#0a0a0f] hover:bg-[#00ffaa]' : 'bg-[#1a1a2a] text-[#333350] cursor-not-allowed'}`}>
+                {isExecuting ? '⟳' : '▲ UP'}
+              </button>
+              <button onClick={() => manualTrade('DOWN')} disabled={!canTrade}
+                className={`py-3 text-sm font-bold rounded transition-all active:scale-95 ${canTrade ? 'bg-[#ff4466] text-white hover:bg-[#ff6688]' : 'bg-[#1a1a2a] text-[#333350] cursor-not-allowed'}`}>
+                {isExecuting ? '⟳' : '▼ DOWN'}
+              </button>
+            </div>
+            {!canTrade && !isExecuting && (
+              <div className="text-[9px] text-[#ffaa00] text-center font-mono">
+                {spotPrice === 0 ? 'Waiting for price feed...' : edge <= 2 ? 'Edge < 2% — no trade' : 'EV negative — no trade'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-1.5">
+          <StatBox label="Trades" value={String(totalTrades)} />
+          <StatBox label="Win Rate" value={`${winRate.toFixed(1)}%`} color={winRate >= 54 ? '#00ff88' : winRate >= 45 ? '#ffaa00' : '#ff4466'} />
+          <StatBox label="Profit Factor" value={profitFactor.toFixed(2)} color={profitFactor >= 1.3 ? '#00ff88' : '#ffaa00'} />
+          <StatBox label="Max DD" value={`${(maxDrawdown * 100).toFixed(1)}%`} color={maxDrawdown <= 0.1 ? '#00ff88' : '#ff4466'} />
+        </div>
+
+        {/* Recent trades */}
+        {recentTrades.length > 0 && (
+          <div>
+            <div className="text-[9px] font-mono text-[#333350] uppercase tracking-wider mb-1">Recent</div>
+            <div className="space-y-0.5">
+              {recentTrades.map(t => (
+                <div key={t.id} className="flex items-center justify-between bg-[#0a0a14] rounded px-2 py-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] ${t.direction === 'UP' ? 'text-[#00ff88]' : 'text-[#ff4466]'}`}>
+                      {t.direction === 'UP' ? '▲' : '▼'}
+                    </span>
+                    <span className="text-[9px] text-[#444460]">
+                      {new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {t.status === 'open' && (
+                      <motion.span animate={{ opacity: [1, 0.3, 1] }} transition={{ repeat: Infinity, duration: 1.5 }}
+                        className="text-[8px] text-[#4488ff]">OPEN</motion.span>
+                    )}
+                  </div>
+                  <span className={`text-[10px] font-bold ${(t.pnl || 0) > 0 ? 'text-[#00ff88]' : (t.pnl || 0) < 0 ? 'text-[#ff4466]' : 'text-[#444460]'}`}>
+                    {t.status === 'open' ? '—' : `${(t.pnl || 0) >= 0 ? '+' : ''}$${(t.pnl || 0).toFixed(0)}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Confirmation Modal */}
-      {showConfirmation && (
-        <TradeConfirmationModal
-          pendingDirection={pendingDirection}
-          recommendedBet={recommendedBet}
-          edge={edge}
-          spotPrice={spotPrice}
-          isExecuting={isExecuting}
-          onCancel={handleCancelConfirmation}
-          onConfirm={confirmTrade}
-        />
-      )}
+      {/* Confirm modal */}
+      <AnimatePresence>
+        {showConfirm && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-[#07070f]/90 flex items-center justify-center z-50">
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              className="bg-[#111118] border border-[#1e1e2e] rounded-lg p-4 mx-4 w-full max-w-[240px]">
+              <div className="text-sm font-bold text-[#e8e8f0] mb-3">Confirm {pendingDir} trade</div>
+              <div className="space-y-1.5 text-[11px] font-mono text-[#666680] mb-4">
+                <div className="flex justify-between"><span>Size</span><span className="text-[#e8e8f0]">${(recommendedBet > 0 ? recommendedBet : 25).toFixed(0)}</span></div>
+                <div className="flex justify-between"><span>Entry</span><span className="text-[#e8e8f0]">${spotPrice?.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Edge</span><span className="text-[#00ff88]">{edge.toFixed(1)}%</span></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => { setShowConfirm(false); setPendingDir(null); }}
+                  className="py-2 text-xs rounded bg-[#1e1e2e] text-[#666680] hover:bg-[#2a2a3a]">Cancel</button>
+                <button onClick={confirmTrade}
+                  className={`py-2 text-xs font-bold rounded ${pendingDir === 'UP' ? 'bg-[#00ff88] text-[#0a0a0f]' : 'bg-[#ff4466] text-white'}`}>
+                  Confirm
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
