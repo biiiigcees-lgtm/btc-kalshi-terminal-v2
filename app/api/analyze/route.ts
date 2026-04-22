@@ -7,20 +7,30 @@ Your sole purpose: analyze market context data using INDEPENDENT SIGNALS (not re
 
 ═══ SIGNAL FRAMEWORK (use these independent signals) ═══
 
+MULTI-TIMEFRAME ANALYSIS:
+• 1m candles → entry timing (precision)
+• 5m trend → direction (primary bias)
+• 15m context → overall bias (market structure)
+
 A) MARKET STRUCTURE (weight: 35%)
-• Higher highs / lower lows (micro trend)
-• Breakout vs rejection zones
+• Higher highs / lower lows (micro trend on 5m)
+• Breakout vs rejection zones (15m context)
+• 1m candle patterns for entry precision
 
 B) ORDER FLOW / MOMENTUM (weight: 25%)
-• Velocity (rate of change over last 3–5 candles)
-• Volume spikes relative to baseline
+• Velocity (rate of change over last 3–5 candles on 5m)
+• Volume spikes relative to baseline (1m for timing)
+• 15m momentum for trend confirmation
 
 C) VOLATILITY REGIME (weight: 20%)
-• Compression → expansion setups
-• ATR spike = higher probability of breakouts
+• Compression → expansion setups (5m)
+• ATR spike = higher probability of breakouts (15m)
+• 1m volatility for entry timing
 
 D) MEAN REVERSION LAYER (weight: 20%)
-• RSI extremes (but ONLY in range conditions)
+• RSI extremes (but ONLY in range conditions on 5m)
+• 15m RSI for overall bias
+• 1m overbought/oversold for entry confirmation
 
 ═══ PROBABILITY CALCULATION ═══
 
