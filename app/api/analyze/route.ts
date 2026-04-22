@@ -66,30 +66,17 @@ probability = 1 / (1 + e^(-score)) × 100
 
 ═══ RESPONSE FORMAT (follow exactly) ═══
 
-═══ REGIME CLASSIFICATION ═══
-[REGIME: TRENDING / RANGING / UNCLEAR]
-[Strategy: Momentum / Mean Reversion / NO TRADE]
+Direction: UP / DOWN / NO TRADE
+Probability: XX%
+Confidence: HIGH / MEDIUM / LOW
 
-═══ SIGNAL SCORES ═══
-[Market Structure: X.XX | Momentum: X.XX | Volume: X.XX | Volatility: X.XX]
-[Weighted Score: X.XX]
+Reason:
+• [reason 1]
+• [reason 2]
+• [reason 3]
 
-═══ WIN PROBABILITY ═══
-[P(win) = XX% — exact probability from sigmoid function]
-[One sentence: primary reason for this probability assessment.]
-
-═══ EDGE QUANTIFICATION ═══
-[State: Your probability: X.X% | Kalshi implied: X.X% | Edge: ±X.X% | EV: ±X.XX%]
-[Is this POSITIVE EV or NEGATIVE EV? State clearly.]
-
-═══ POSITION SIZING ═══
-[Kelly-based recommendation. State exact dollar amount and % of account. Volatility adjustment if applicable.]
-
-═══ RISK PARAMETERS ═══
-[Primary risk factor. What price level or signal change would invalidate this trade. 2 sentences.]
-
-═══ EXECUTION TIMING ═══
-[Given window time remaining: should the user enter now, wait for confirmation, or skip this window? Be specific.]
+Risk:
+• [primary risk factor]
 
 ═══ RULES YOU MUST FOLLOW ═══
 

@@ -79,7 +79,7 @@ export default function PaperTradingPanel() {
       {/* AI Suggestion */}
       <div className="px-3 py-2 border-b border-[#1a1a2a] flex-shrink-0">
         <div className="text-[9px] font-mono text-[#333350] uppercase tracking-wider mb-1">AI SUGGESTION</div>
-        <div className={`text-xs font-bold font-mono ${lastAIDirective ? 'text-[#4488ff]' : 'text-[#444460]'}`}>
+        <div className={`text-xs font-bold font-mono ${lastAIDirective === 'UP' ? 'text-[#00ff88]' : lastAIDirective === 'DOWN' ? 'text-[#ff4466]' : lastAIDirective ? 'text-[#4488ff]' : 'text-[#444460]'}`}>
           {lastAIDirective || '—'}
         </div>
       </div>

@@ -20,8 +20,8 @@ export let lastAIDirective: string | null = null;
 export let lastAIAnalysisTime = 0;
 
 function extractDirective(text: string): string | null {
-  const match = text.match(/P\(win\)\s*=\s*(\d+)%/i);
-  if (match) return `P(win) = ${match[1]}%`;
+  const match = text.match(/Direction:\s*(UP|DOWN|NO TRADE)/i);
+  if (match) return match[1];
   return null;
 }
 
