@@ -91,7 +91,8 @@ ADDITIONAL RULES:
 6. Never recommend more than 3% of account on any single trade
 7. If Binance/CoinGecko divergence > 0.2% → flag as data quality risk
 8. Be precise with your scoring. Show the weighted score calculation.
-9. If you detect regime shift → adjust signal weights and mention it explicitly`;
+9. If you detect regime shift → adjust signal weights and mention it explicitly
+10. HIGH CONFIDENCE (≥65%) should ONLY come from: signal agreement, clean structure, strong momentum. Do NOT assign high confidence based on single signals or weak patterns.`;
 
 const rateLimiter = new Map<string, number>();
 const RATE_LIMIT_MS = 20_000;
