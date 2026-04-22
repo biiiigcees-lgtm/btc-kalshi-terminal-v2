@@ -6,19 +6,28 @@ import CountdownTimer from '@/components/CountdownTimer';
 import SignalDashboard from '@/components/SignalDashboard';
 import EnsembleGauges from '@/components/EnsembleGauges';
 import PositionSizingPanel from '@/components/PositionSizingPanel';
-import PaperTradingPanel from '@/components/PaperTradingPanel';
-import AIAdvisor from '@/components/AIAdvisor';
-import TradeLog from '@/components/TradeLog';
 import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket';
 import { useSignalEngine } from '@/hooks/useSignalEngine';
+import { PriceSkeleton } from '@/components/LoadingSkeleton';
 
 const BTCChart = dynamic(() => import('@/components/BTCChart'), {
   ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-center justify-center text-[#333350] text-xs font-mono">
-      Loading chart...
-    </div>
-  ),
+  loading: () => <PriceSkeleton />,
+});
+
+const PaperTradingPanel = dynamic(() => import('@/components/PaperTradingPanel'), {
+  ssr: false,
+  loading: () => <div className="h-full flex items-center justify-center text-[#333350] text-xs font-mono">Loading...</div>,
+});
+
+const AIAdvisor = dynamic(() => import('@/components/AIAdvisor'), {
+  ssr: false,
+  loading: () => <div className="h-full flex items-center justify-center text-[#333350] text-xs font-mono">Loading AI...</div>,
+});
+
+const TradeLog = dynamic(() => import('@/components/TradeLog'), {
+  ssr: false,
+  loading: () => <div className="h-full flex items-center justify-center text-[#333350] text-xs font-mono">Loading trades...</div>,
 });
 
 function SectionLabel({ color, label }: { color: string; label: string }) {
