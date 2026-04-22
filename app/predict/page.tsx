@@ -44,7 +44,7 @@ export default function PredictPage() {
             <div className="text-right">
               <div className="text-[11px] text-[#4a7a96] tracking-widest mb-1">AI PREDICTION ENGINE</div>
               <div className="text-[10px] text-[#1a2a35]">v2.0 · Weighted Signals + Timing</div>
-              <div className="text-[10px] text-[#1a2a35] mt-0.5">P(price > target in N min)</div>
+              <div className="text-[10px] text-[#1a2a35] mt-0.5">P(price &gt; target in N min)</div>
             </div>
           </div>
         </div>
