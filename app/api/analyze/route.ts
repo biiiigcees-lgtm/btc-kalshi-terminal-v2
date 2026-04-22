@@ -59,6 +59,20 @@ probability = 1 / (1 + e^(-score)) × 100
 [Given window time remaining: should the user enter now, wait for confirmation, or skip this window? Be specific.]
 
 ═══ RULES YOU MUST FOLLOW ═══
+
+GO / NO-GO LOGIC:
+
+Trade ONLY if:
+• P(win) ≥ 60%
+• Momentum confirms direction
+• No major rejection zone nearby
+
+AVOID trades when:
+• Sideways chop (low volatility)
+• Conflicting signals
+• Late entries (after big move already happened)
+
+ADDITIONAL RULES:
 1. Use ONLY the 4 independent signal categories above. Do NOT add redundant indicators (e.g., MACD, stochastic, Bollinger Bands)
 2. If probability is below 53% OR EV is negative → output P(win) < 53% and recommend NO TRADE
 3. If consecutive losses ≥ 3 → recommend 50% position size reduction regardless of signal strength
