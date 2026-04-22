@@ -1,11 +1,11 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePaperTradeStore } from '../stores/paperTradeStore';
 import { usePriceStore } from '../stores/priceStore';
 import { useKalshiStore } from '../stores/kalshiStore';
 import { useSignalStore } from '../stores/signalStore';
-import { lastAIDirective, lastAIAnalysisTime } from './AIAdvisor';
+import { lastAIDirective } from './AIAdvisor';
 
 function StatBox({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
@@ -17,12 +17,9 @@ function StatBox({ label, value, color }: { label: string; value: string; color?
 }
 
 export default function PaperTradingPanel() {
-  const [autoMode, setAutoMode] = useState(true);
-  const [lastAutoAction, setLastAutoAction] = useState<string>('');
   const [isExecuting, setIsExecuting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [pendingDir, setPendingDir] = useState<'UP' | 'DOWN' | null>(null);
-  const lastExecutedAnalysis = useRef(0);
 
   const {
     virtualBalance, activeTrade, trades,
@@ -35,40 +32,6 @@ export default function PaperTradingPanel() {
   const { ensembleProbability, regime } = useSignalStore();
 
   const canTrade = edge > 2 && expectedValue > 0 && !activeTrade && !isExecuting && spotPrice > 0;
-
-  // AI Auto-trading: watch lastAIAnalysisTime and execute when AI gives directive
-  useEffect(() => {
-    if (!autoMode) return;
-    if (!lastAIDirective) return;
-    if (lastAIAnalysisTime <= lastExecutedAnalysis.current) return;
-    if (lastAIDirective === 'NO TRADE') {
-      lastExecutedAnalysis.current = lastAIAnalysisTime;
-      setLastAutoAction(`NO TRADE — AI held at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
-      return;
-    }
-    if (!canTrade) return;
-
-    lastExecutedAnalysis.current = lastAIAnalysisTime;
-    const dir = lastAIDirective === 'BET UP' ? 'UP' : 'DOWN';
-    executeAITrade(dir);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastAIAnalysisTime, autoMode, canTrade]);
-
-  async function executeAITrade(dir: 'UP' | 'DOWN') {
-    if (!spotPrice || isExecuting) return;
-    setIsExecuting(true);
-    await new Promise(r => setTimeout(r, 400));
-    const size = recommendedBet > 0 ? recommendedBet : Math.min(50, virtualBalance * 0.02);
-    enterTrade({
-      direction: dir,
-      entryPrice: spotPrice,
-      size,
-      windowId: `ai-auto-${Date.now()}`,
-      metadata: { ensembleProbability, edge, expectedValue, regime: `${regime.trend}-${regime.volatility}`, targetPrice: null },
-    });
-    setLastAutoAction(`AI AUTO ${dir} — $${size.toFixed(0)} @ $${spotPrice.toLocaleString()} — ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
-    setIsExecuting(false);
-  }
 
   function manualTrade(dir: 'UP' | 'DOWN') {
     if (!canTrade) return;
@@ -96,7 +59,6 @@ export default function PaperTradingPanel() {
   function closePosition() {
     if (!activeTrade || !spotPrice) return;
     exitTrade({ exitPrice: spotPrice, windowId: `close-${Date.now()}` });
-    setLastAutoAction(`Closed @ $${spotPrice.toLocaleString()} — ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
   }
 
   const recentTrades = [...trades].reverse().slice(0, 5);
@@ -114,38 +76,13 @@ export default function PaperTradingPanel() {
         </div>
       </div>
 
-      {/* AI Auto mode toggle */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[#1a1a2a] flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setAutoMode(a => !a)}
-            className={`relative w-8 h-4 rounded-full transition-colors ${autoMode ? 'bg-[#4488ff]' : 'bg-[#1a1a2a]'}`}
-          >
-            <motion.div
-              animate={{ x: autoMode ? 16 : 2 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-              className="absolute top-0.5 w-3 h-3 rounded-full bg-white"
-            />
-          </button>
-          <span className={`text-[10px] font-mono ${autoMode ? 'text-[#4488ff]' : 'text-[#444460]'}`}>
-            {autoMode ? 'AI AUTO-TRADE ON' : 'MANUAL MODE'}
-          </span>
+      {/* AI Suggestion */}
+      <div className="px-3 py-2 border-b border-[#1a1a2a] flex-shrink-0">
+        <div className="text-[9px] font-mono text-[#333350] uppercase tracking-wider mb-1">AI SUGGESTION</div>
+        <div className={`text-xs font-bold font-mono ${lastAIDirective === 'BET UP' ? 'text-[#00ff88]' : lastAIDirective === 'BET DOWN' ? 'text-[#ff4466]' : 'text-[#444460]'}`}>
+          {lastAIDirective || '—'}
         </div>
-        {autoMode && (
-          <motion.div animate={{ opacity: [1, 0.4, 1] }} transition={{ repeat: Infinity, duration: 2 }}
-            className="text-[9px] text-[#4488ff] font-mono">● LIVE</motion.div>
-        )}
       </div>
-
-      {/* Last AI action */}
-      <AnimatePresence>
-        {lastAutoAction && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-            className="px-3 py-1.5 border-b border-[#1a1a2a] flex-shrink-0 overflow-hidden">
-            <div className="text-[9px] font-mono text-[#444460] truncate">⟳ {lastAutoAction}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="flex-1 overflow-y-auto min-h-0 p-2 space-y-2">
         {/* Active trade */}
@@ -176,6 +113,7 @@ export default function PaperTradingPanel() {
         {/* Manual trade buttons (shown when no active trade) */}
         {!activeTrade && (
           <div className="space-y-1.5">
+            <div className="text-[9px] text-[#333350] text-center font-mono mb-1">MANUAL EXECUTION</div>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => manualTrade('UP')} disabled={!canTrade}
                 className={`py-3 text-sm font-bold rounded transition-all active:scale-95 ${canTrade ? 'bg-[#00ff88] text-[#0a0a0f] hover:bg-[#00ffaa]' : 'bg-[#1a1a2a] text-[#333350] cursor-not-allowed'}`}>

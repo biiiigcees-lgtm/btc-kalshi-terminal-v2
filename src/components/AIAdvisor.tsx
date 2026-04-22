@@ -26,26 +26,6 @@ function extractDirective(text: string): 'BET UP' | 'BET DOWN' | 'NO TRADE' | nu
   return null;
 }
 
-function DirectiveBadge({ directive }: { directive: string }) {
-  const map: Record<string, { bg: string; fg: string; glow: string; icon: string }> = {
-    'BET UP':   { bg: '#00ff8818', fg: '#00ff88', glow: '0 0 24px rgba(0,255,136,0.25)', icon: '▲' },
-    'BET DOWN': { bg: '#ff446618', fg: '#ff4466', glow: '0 0 24px rgba(255,68,102,0.25)', icon: '▼' },
-    'NO TRADE': { bg: '#1a1a2a',   fg: '#666680', glow: 'none', icon: '—' },
-  };
-  const c = map[directive] || map['NO TRADE'];
-  return (
-    <motion.div
-      initial={{ scale: 0.85, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-      className="inline-flex items-center gap-2 px-3 py-1.5 rounded mb-2 font-bold text-base tracking-widest"
-      style={{ background: c.bg, color: c.fg, boxShadow: c.glow, border: `1px solid ${c.fg}33` }}
-    >
-      {c.icon} {directive}
-    </motion.div>
-  );
-}
-
 function StreamingText({ text, onDone }: { text: string; onDone: () => void }) {
   const [shown, setShown] = useState('');
   const iRef = useRef(0);
@@ -116,7 +96,6 @@ export default function AIAdvisor() {
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [lastTime, setLastTime] = useState('');
-  const [directive, setDirective] = useState<string | null>(null);
   const [streamingIdx, setStreamingIdx] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { secondsRemaining } = useKalshiWindow();
@@ -188,7 +167,6 @@ export default function AIAdvisor() {
       const d = extractDirective(data.result);
       lastAIDirective = d;
       lastAIAnalysisTime = Date.now();
-      setDirective(d);
       setLastTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
 
       setMessages(prev => {
@@ -231,7 +209,7 @@ export default function AIAdvisor() {
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#1a1a2a] flex-shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-[9px] font-mono text-[#444460] uppercase tracking-[0.2em]">AI ADVISOR</span>
+          <span className="text-[9px] font-mono text-[#444460] uppercase tracking-[0.2em]">AI INTELLIGENCE</span>
           <AnimatePresence>
             {loading && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -244,16 +222,6 @@ export default function AIAdvisor() {
           </AnimatePresence>
         </div>
         <div className="flex items-center gap-2">
-          <AnimatePresence mode="wait">
-            {directive && !loading && (
-              <motion.span key={directive}
-                initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }}
-                className={`text-[10px] font-bold font-mono ${directive === 'BET UP' ? 'text-[#00ff88]' : directive === 'BET DOWN' ? 'text-[#ff4466]' : 'text-[#444460]'}`}
-              >
-                {directive === 'BET UP' ? '▲' : directive === 'BET DOWN' ? '▼' : '—'} {directive}
-              </motion.span>
-            )}
-          </AnimatePresence>
           {lastTime && <span className="text-[9px] text-[#333350] font-mono">{lastTime}</span>}
           <button
             onClick={() => runAnalysis('manual')}
@@ -267,28 +235,9 @@ export default function AIAdvisor() {
         </div>
       </div>
 
-      {/* Directive banner */}
-      <AnimatePresence>
-        {directive && directive !== 'NO TRADE' && !loading && (
-          <motion.div key={directive}
-            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-            className={`flex-shrink-0 overflow-hidden border-b border-[#1a1a2a] ${directive === 'BET UP' ? 'bg-[#00ff8808]' : 'bg-[#ff446608]'}`}
-          >
-            <div className="px-3 py-1.5 flex items-center gap-3">
-              <motion.span animate={{ opacity: [1, 0.5, 1] }} transition={{ repeat: Infinity, duration: 2 }}
-                className={`text-xs font-bold tracking-widest font-mono ${directive === 'BET UP' ? 'text-[#00ff88]' : 'text-[#ff4466]'}`}>
-                {directive === 'BET UP' ? '▲ BET UP' : '▼ BET DOWN'}
-              </motion.span>
-              <span className="text-[9px] text-[#333350] font-mono">CURRENT RECOMMENDATION</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 px-3 py-2 space-y-2">
         {messages.map((msg, idx) => {
-          const d = msg.role === 'assistant' ? extractDirective(msg.content) : null;
           const isStreaming = msg.stream && idx === streamingIdx;
           return (
             <motion.div key={msg.ts}
@@ -303,7 +252,6 @@ export default function AIAdvisor() {
               )}
               {msg.role === 'assistant' && (
                 <div>
-                  {d && <DirectiveBadge directive={d} />}
                   {isStreaming
                     ? <StreamingText text={msg.content} onDone={() => setStreamingIdx(null)} />
                     : renderStatic(msg.content)
