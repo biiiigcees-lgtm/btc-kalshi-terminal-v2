@@ -9,9 +9,11 @@ function sigmoid(x: number) {
   return 1 / (1 + Math.exp(-x));
 }
 
-function calculateSignals(candles: any[]) {
-  const closes = candles.map(c => parseFloat(c[4]));
-  const volumes = candles.map(c => parseFloat(c[5]));
+type Candle = (string | number)[];
+
+function calculateSignals(candles: Candle[]) {
+  const closes = candles.map(c => parseFloat(String(c[4])));
+  const volumes = candles.map(c => parseFloat(String(c[5])));
 
   const last = closes[closes.length - 1];
   const prev = closes[closes.length - 5];
@@ -34,7 +36,7 @@ function calculateSignals(candles: any[]) {
   return { trend, momentum, volume, volatility };
 }
 
-function scoreModel(s: any) {
+function scoreModel(s: { trend: number; momentum: number; volume: number; volatility: number }) {
   return (
     s.trend * 0.35 +
     s.momentum * 0.25 +
@@ -46,14 +48,14 @@ function scoreModel(s: any) {
 export async function GET() {
   try {
     const res = await fetch(BINANCE_API, { cache: "no-store" });
-    const data = await res.json();
+    const data: Candle[] = await res.json();
 
     const signals = calculateSignals(data);
     const score = scoreModel(signals);
     const probability = sigmoid(score);
 
-    const closes = data.map((c: any) => parseFloat(c[4]));
-    const volumes = data.map((c: any) => parseFloat(c[5]));
+    const closes = data.map(c => parseFloat(String(c[4])));
+    const volumes = data.map(c => parseFloat(String(c[5])));
 
     const exec = executionTimingModel({
       probability,
@@ -86,7 +88,7 @@ export async function GET() {
       signals
     });
 
-  } catch (err) {
+  } catch {
     return Response.json({ error: "Failed to compute signal" }, { status: 500 });
   }
 }
