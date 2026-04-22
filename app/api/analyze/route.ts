@@ -106,7 +106,7 @@ ADDITIONAL RULES:
 11. HIGH CONFIDENCE (≥65%) should ONLY come from: signal agreement, clean structure, strong momentum. Do NOT assign high confidence based on single signals or weak patterns.`;
 
 const rateLimiter = new Map<string, number>();
-const RATE_LIMIT_MS = 20_000;
+const RATE_LIMIT_MS = 5_000;
 
 function getIP(req: NextRequest): string {
   return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
@@ -177,7 +177,7 @@ async function callGroq(ctx: string): Promise<string> {
 export async function POST(req: NextRequest) {
   const ip = getIP(req);
   if (!checkRL(ip)) {
-    return NextResponse.json({ error: 'Rate limit: wait 20 seconds between analyses.' }, { status: 429 });
+    return NextResponse.json({ error: 'Rate limit: wait 5 seconds between analyses.' }, { status: 429 });
   }
 
   let marketContext: string;

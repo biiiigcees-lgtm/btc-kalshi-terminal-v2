@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { usePriceStore } from '@/stores/priceStore';
 import { useSignalStore } from '@/stores/signalStore';
 import { useKalshiStore } from '@/stores/kalshiStore';
@@ -12,6 +12,8 @@ export function useSignalEngine() {
   const { setSignals, setEnsembleProbability, setRegime, setRegimeShiftDetected } = useSignalStore();
   const { updateComputedFields } = useKalshiStore();
   const { accountBalance } = useTradeStore();
+  const throttleRef = useRef<number>(0);
+  const THROTTLE_MS = 1000; // Recompute at most once per second
 
   const recompute = useCallback(() => {
     const state = usePriceStore.getState();
@@ -31,6 +33,10 @@ export function useSignalEngine() {
 
   useEffect(() => {
     const unsub = usePriceStore.subscribe((state) => {
+      const now = Date.now();
+      if (now - throttleRef.current < THROTTLE_MS) return;
+      throttleRef.current = now;
+
       if (!state.currentCandle || state.candles.length < 55) return;
       const merged = [...state.candles.slice(0, -1), state.currentCandle];
       if (merged.length < 55) return;
