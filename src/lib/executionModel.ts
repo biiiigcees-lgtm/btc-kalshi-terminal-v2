@@ -7,6 +7,20 @@ export function executionTimingModel({
   closes: number[];
   volumes: number[];
 }) {
+  // --- Late window avoidance (avoid last 60-90 seconds of minute)
+  const seconds = new Date().getSeconds();
+  const avoidLateWindow = seconds > 45;
+
+  if (avoidLateWindow) {
+    return {
+      entry: false,
+      timing: "AVOID LATE WINDOW",
+      momentum: 0,
+      volumeSpike: false,
+      moveSize: 0
+    };
+  }
+
   const last = closes[closes.length - 1];
 
   // --- Momentum (last 3 candles acceleration)
