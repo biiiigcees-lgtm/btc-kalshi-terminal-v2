@@ -1,12 +1,33 @@
 export const runtime = "nodejs";
 
 import { executionTimingModel } from "@/lib/executionModel";
+import { apiCache, priceCache } from "@/lib/cache";
+import { performanceMonitor } from "@/lib/performance";
+import { z } from "zod";
+import { SignalRequestSchema, SignalResponseSchema } from "@/lib/schemas";
 
 // Constants
 const BINANCE_API = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=50";
 const HIGH_PROBABILITY_THRESHOLD = 0.6;
 const LOW_PROBABILITY_THRESHOLD = 0.4;
 const NO_TRADE_SCORE_THRESHOLD = 0.1;
+const CACHE_TTL = 5000; // 5 seconds for price data
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000;
+
+// Circuit breaker for Binance API
+interface CircuitBreakerState {
+  failures: number;
+  lastFailure: number;
+  isOpen: boolean;
+}
+
+const binanceCircuitBreaker: CircuitBreakerState = { failures: 0, lastFailure: 0, isOpen: false };
+const CIRCUIT_BREAKER_THRESHOLD = 3;
+const CIRCUIT_BREAKER_TIMEOUT = 60_000;
+
+// Request deduplication
+const pendingRequests = new Map<string, Promise<unknown>>();
 
 // Types
 interface BinanceCandle {
@@ -53,6 +74,74 @@ interface SignalResponse {
 
 function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
+}
+
+function checkCircuitBreaker(): boolean {
+  const now = Date.now();
+  
+  if (binanceCircuitBreaker.isOpen) {
+    if (now - binanceCircuitBreaker.lastFailure > CIRCUIT_BREAKER_TIMEOUT) {
+      binanceCircuitBreaker.isOpen = false;
+      binanceCircuitBreaker.failures = 0;
+      return true;
+    }
+    return false;
+  }
+  return true;
+}
+
+function recordFailure(): void {
+  binanceCircuitBreaker.failures++;
+  binanceCircuitBreaker.lastFailure = Date.now();
+  
+  if (binanceCircuitBreaker.failures >= CIRCUIT_BREAKER_THRESHOLD) {
+    binanceCircuitBreaker.isOpen = true;
+  }
+}
+
+function recordSuccess(): void {
+  binanceCircuitBreaker.failures = 0;
+  binanceCircuitBreaker.isOpen = false;
+}
+
+async function fetchWithRetry(url: string, options: RequestInit = {}): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        cache: "no-store",
+        headers: {
+          ...options.headers,
+          "Connection": "keep-alive",
+        },
+      });
+      
+      if (response.ok) {
+        recordSuccess();
+        return response;
+      }
+      
+      if (attempt === MAX_RETRIES - 1) {
+        recordFailure();
+        throw new Error(`Binance API failed: ${response.status}`);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (attempt + 1)));
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      if (attempt === MAX_RETRIES - 1) {
+        recordFailure();
+        throw lastError;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (attempt + 1)));
+    }
+  }
+  
+  throw lastError || new Error("Failed to fetch");
 }
 
 function parseCandles(data: unknown[]): BinanceCandle[] {
@@ -188,17 +277,51 @@ function determineDecision(
 }
 
 export async function POST(req: Request): Promise<Response> {
+  const startTime = Date.now();
+  
   try {
     const body = await req.json();
-    const targetPrice = body?.targetPrice ? parseFloat(body.targetPrice) : null;
-    const timeWindow = (body?.timeWindow as string) || "15M";
+    const validated = SignalRequestSchema.parse(body);
+    const targetPrice = validated.targetPrice;
+    const timeWindow = validated.timeWindow || "15M";
 
-    const res = await fetch(BINANCE_API, { cache: "no-store" });
-    if (!res.ok) {
-      throw new Error(`Binance API failed: ${res.status}`);
+    // Check cache for price data
+    const cacheKey = "binance_btcusdt_1m";
+    let candles: BinanceCandle[];
+    const cachedCandles = priceCache.get(cacheKey) as BinanceCandle[] | null;
+    
+    if (cachedCandles) {
+      candles = cachedCandles;
+      performanceMonitor.recordApiCall("signal_cache", Date.now() - startTime);
+    } else {
+      // Check circuit breaker
+      if (!checkCircuitBreaker()) {
+        throw new Error("Binance API circuit breaker open");
+      }
+      
+      // Request deduplication
+      const requestKey = `binance_fetch_${Date.now()}`;
+      if (pendingRequests.has(requestKey)) {
+        await pendingRequests.get(requestKey);
+      }
+      
+      const fetchPromise = fetchWithRetry(BINANCE_API);
+      pendingRequests.set(requestKey, fetchPromise);
+      
+      try {
+        const res = await fetchPromise;
+        const rawData = await res.json();
+        candles = parseCandles(rawData);
+        
+        // Cache the result
+        priceCache.set(cacheKey, candles, CACHE_TTL);
+        
+        const duration = Date.now() - startTime;
+        performanceMonitor.recordApiCall("binance_api", duration);
+      } finally {
+        pendingRequests.delete(requestKey);
+      }
     }
-    const rawData = await res.json();
-    const candles = parseCandles(rawData);
 
     const signals = calculateSignals(candles);
     const score = scoreModel(signals);
@@ -236,10 +359,34 @@ export async function POST(req: Request): Promise<Response> {
       targetAnalysis,
     };
 
-    return Response.json(response);
+    // Validate response
+    const validatedResponse = SignalResponseSchema.parse(response);
+    
+    const totalDuration = Date.now() - startTime;
+    performanceMonitor.recordApiCall("signal_total", totalDuration);
+    
+    return Response.json({
+      ...validatedResponse,
+      cached: !!cachedCandles,
+      duration: totalDuration,
+    });
   } catch (error) {
+    const duration = Date.now() - startTime;
+    performanceMonitor.recordApiCall("signal_error", duration);
+    
+    if (error instanceof z.ZodError) {
+      console.error("Signal validation error:", error.errors);
+      return Response.json({ 
+        error: "Invalid signal data",
+        details: error.errors
+      }, { status: 500 });
+    }
+    
     console.error("Signal computation error:", error);
     const errorMessage = error instanceof Error ? error.message : "Failed to compute signal";
-    return Response.json({ error: errorMessage }, { status: 500 });
+    return Response.json({ 
+      error: errorMessage,
+      duration
+    }, { status: 500 });
   }
 }
