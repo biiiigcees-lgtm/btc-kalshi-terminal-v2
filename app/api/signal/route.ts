@@ -1,5 +1,7 @@
 export const runtime = "nodejs";
 
+import { executionTimingModel } from "@/lib/executionModel";
+
 const BINANCE_API =
   "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=50";
 
@@ -50,6 +52,15 @@ export async function GET() {
     const score = scoreModel(signals);
     const probability = sigmoid(score);
 
+    const closes = data.map((c: any) => parseFloat(c[4]));
+    const volumes = data.map((c: any) => parseFloat(c[5]));
+
+    const exec = executionTimingModel({
+      probability,
+      closes,
+      volumes
+    });
+
     let decision = "NO TRADE";
     let confidence = "LOW";
 
@@ -72,6 +83,7 @@ export async function GET() {
       decision,
       confidence,
       signals,
+      execution: exec,
     });
 
   } catch (err) {
