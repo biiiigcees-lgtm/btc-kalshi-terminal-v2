@@ -29,25 +29,20 @@ export function useSignalEngine() {
     updateComputedFields({ ensembleProbability: ensemble, accountBalance, atrRatio: getATRRatio(candles) });
   }, [accountBalance, setSignals, setEnsembleProbability, setRegime, setRegimeShiftDetected, updateComputedFields]);
 
-  // Recompute on every price tick using live currentCandle
   useEffect(() => {
-    const unsub = usePriceStore.subscribe(
-      (state) => state.spotPrice,
-      () => {
-        const state = usePriceStore.getState();
-        if (!state.currentCandle || state.candles.length < 55) return;
-        const merged = [...state.candles.slice(0, -1), state.currentCandle];
-        if (merged.length < 55) return;
-        const signals = computeSignals(merged);
-        if (signals.length === 0) return;
-        const regime = detectRegime(merged);
-        setRegime(regime);
-        setSignals(signals);
-        const ensemble = computeEnsemble(signals, regime);
-        setEnsembleProbability(ensemble);
-        updateComputedFields({ ensembleProbability: ensemble, accountBalance, atrRatio: getATRRatio(merged) });
-      }
-    );
+    const unsub = usePriceStore.subscribe((state) => {
+      if (!state.currentCandle || state.candles.length < 55) return;
+      const merged = [...state.candles.slice(0, -1), state.currentCandle];
+      if (merged.length < 55) return;
+      const signals = computeSignals(merged);
+      if (signals.length === 0) return;
+      const regime = detectRegime(merged);
+      setRegime(regime);
+      setSignals(signals);
+      const ensemble = computeEnsemble(signals, regime);
+      setEnsembleProbability(ensemble);
+      updateComputedFields({ ensembleProbability: ensemble, accountBalance, atrRatio: getATRRatio(merged) });
+    });
     return unsub;
   }, [accountBalance, setSignals, setEnsembleProbability, setRegime, updateComputedFields]);
 
