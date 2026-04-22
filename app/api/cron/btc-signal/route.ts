@@ -1,7 +1,7 @@
 // /app/api/cron/btc-signal/route.ts — SERVER ONLY
 import { NextRequest, NextResponse } from 'next/server';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
   // Verify CRON_SECRET for security
