@@ -59,15 +59,17 @@ export default function PositionSizingPanel() {
           <motion.div key={signal}
             initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
             className="flex items-center gap-2 px-2 py-0.5 rounded border"
+            data-signal-color={signalColor}
             style={{ borderColor: `${signalColor}44`, background: `${signalColor}0d` }}
           >
             <motion.div
               animate={signal !== 'NO TRADE' ? { scale: [1, 1.2, 1] } : {}}
               transition={{ repeat: Infinity, duration: 2 }}
               className="w-1.5 h-1.5 rounded-full"
-              style={{ background: signalColor }}
+              data-signal-color={signalColor}
+              style={{ backgroundColor: signalColor }}
             />
-            <span className="text-[10px] font-bold" style={{ color: signalColor }}>{signal}</span>
+            <span className="text-[10px] font-bold" data-signal-color={signalColor} style={{ color: signalColor }}>{signal}</span>
           </motion.div>
         </AnimatePresence>
       </div>
@@ -121,7 +123,7 @@ export default function PositionSizingPanel() {
           {/* Volatility */}
           <div className="bg-[#0a0a14] border border-[#1a1a2a] rounded p-2">
             <div className="text-[8px] text-[#444460] mb-1">VOL</div>
-            <span className="text-[10px] font-bold" style={{ color: volColor }}>{volLabel.split(' ')[0]}</span>
+            <span className="text-[10px] font-bold" style={{ color: volColor }} data-vol-color={volColor}>{volLabel.split(' ')[0]}</span>
           </div>
         </div>
 
@@ -131,7 +133,7 @@ export default function PositionSizingPanel() {
             <span className="text-[9px] font-mono text-[#444460]">{regime.trend.toUpperCase()}</span>
           </div>
           <div className="bg-[#0a0a14] border border-[#1a1a2a] rounded px-2 py-1 flex-1 text-center">
-            <span className="text-[9px] font-mono" style={{ color: volColor }}>{regime.volatility.toUpperCase()} VOL</span>
+            <span className="text-[9px] font-mono" style={{ color: volColor }} data-vol-color={volColor}>{regime.volatility.toUpperCase()} VOL</span>
           </div>
         </div>
 
