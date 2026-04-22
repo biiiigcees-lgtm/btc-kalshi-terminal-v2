@@ -9,6 +9,7 @@ import { computeEnsemble } from '@/utils/ensemble';
 import { detectRegime } from '@/utils/regimeDetector';
 import { performanceMonitor } from '@/lib/performance';
 import { signalCache } from '@/lib/cache';
+import type { Candle } from '@/types';
 
 export function useSignalEngine() {
   const { setSignals, setEnsembleProbability, setRegime, setRegimeShiftDetected } = useSignalStore();
@@ -19,7 +20,7 @@ export function useSignalEngine() {
   const lastCandleHash = useRef<string>('');
   const MIN_CANDLE_THRESHOLD = 55;
 
-  const getCandleHash = useCallback((candles: typeof usePriceStore.getState().candles) => {
+  const getCandleHash = useCallback((candles: Candle[]) => {
     return candles.slice(-5).map(c => `${c.time}-${c.close}`).join('|');
   }, []);
 
