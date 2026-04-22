@@ -144,6 +144,8 @@ export default function PositionSizingPanel() {
               <input type="number"
                 className="bg-transparent text-sm font-mono text-[#e8e8f0] w-full py-1 focus:outline-none"
                 value={accountBalance}
+                aria-label="Account Balance"
+                placeholder="Account Balance"
                 onChange={e => {
                   const n = parseFloat(e.target.value);
                   if (isNaN(n) || n < 0) { setBalanceErr(true); return; }
@@ -160,10 +162,12 @@ export default function PositionSizingPanel() {
               <input type="number"
                 className="bg-transparent text-sm font-mono text-[#e8e8f0] w-full py-1 focus:outline-none"
                 value={intendedBet}
+                aria-label="Bet Size"
+                placeholder="Bet Size"
                 onChange={e => {
                   const n = parseFloat(e.target.value);
                   if (isNaN(n) || n < 0) { setBetErr(true); return; }
-                  setBetErr(n > accountBalance * 0.5);
+                  setBetErr(false);
                   setIntendedBet(n);
                 }}
               />
