@@ -2,6 +2,7 @@
 import type { Metadata } from 'next';
 import { JetBrains_Mono, Syne } from 'next/font/google';
 import './globals.css';
+import ErrorBoundaryWrapper from '@/components/ErrorBoundaryWrapper';
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
@@ -24,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${jetbrainsMono.variable} ${syne.variable}`}>
       <body className="bg-[#0a0a0f] text-[#e8e8f0] overflow-x-hidden">
-        {children}
+        <ErrorBoundaryWrapper>{children}</ErrorBoundaryWrapper>
       </body>
     </html>
   );
