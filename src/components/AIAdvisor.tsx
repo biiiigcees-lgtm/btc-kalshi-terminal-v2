@@ -16,13 +16,12 @@ let globalLock = false;
 let globalLastRun = 0;
 const COOLDOWN = 25_000;
 
-export let lastAIDirective: 'BET UP' | 'BET DOWN' | 'NO TRADE' | null = null;
+export let lastAIDirective: string | null = null;
 export let lastAIAnalysisTime = 0;
 
-function extractDirective(text: string): 'BET UP' | 'BET DOWN' | 'NO TRADE' | null {
-  if (/BET UP/i.test(text)) return 'BET UP';
-  if (/BET DOWN/i.test(text)) return 'BET DOWN';
-  if (/NO TRADE/i.test(text)) return 'NO TRADE';
+function extractDirective(text: string): string | null {
+  const match = text.match(/P\(win\)\s*=\s*(\d+)%/i);
+  if (match) return `P(win) = ${match[1]}%`;
   return null;
 }
 

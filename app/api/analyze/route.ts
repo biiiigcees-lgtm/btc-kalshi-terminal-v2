@@ -20,9 +20,9 @@ Your sole purpose: analyze market context data and output a precise, decisive, s
 [State: Your probability: X.X% | Kalshi implied: X.X% | Edge: ±X.X% | EV: ±X.XX%]
 [Is this POSITIVE EV or NEGATIVE EV? State clearly.]
 
-═══ BET RECOMMENDATION ═══
-[BET UP / BET DOWN / NO TRADE — one of these exactly on its own line]
-[One sentence: primary reason for this call.]
+═══ WIN PROBABILITY ═══
+[P(win) = XX% — exact probability of winning this trade]
+[One sentence: primary reason for this probability assessment.]
 
 ═══ POSITION SIZING ═══
 [Kelly-based recommendation. State exact dollar amount and % of account. Volatility adjustment if applicable.]
