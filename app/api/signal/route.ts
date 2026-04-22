@@ -82,8 +82,8 @@ export async function GET() {
       probability: +(probability * 100).toFixed(2),
       decision,
       confidence,
-      signals,
       execution: exec,
+      signals
     });
 
   } catch (err) {
