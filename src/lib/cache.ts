@@ -62,7 +62,7 @@ class SimpleCache<T> {
 
 // Create singleton instances for different use cases
 export const apiCache = new SimpleCache<unknown>(30000); // 30 seconds for API calls
-export const priceCache = new SimpleCache<number>(5000); // 5 seconds for prices
+export const priceCache = new SimpleCache<unknown>(5000); // 5 seconds for prices
 export const signalCache = new SimpleCache<unknown>(60000); // 60 seconds for signals
 
 // Cleanup cache periodically
