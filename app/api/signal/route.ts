@@ -45,8 +45,12 @@ function scoreModel(s: { trend: number; momentum: number; volume: number; volati
   );
 }
 
-export async function GET() {
+export async function POST(req: Request) {
   try {
+    const body = await req.json();
+    const targetPrice = body?.targetPrice ? parseFloat(body.targetPrice) : null;
+    const timeWindow = body?.timeWindow || "15M";
+
     const res = await fetch(BINANCE_API, { cache: "no-store" });
     const data: Candle[] = await res.json();
 
@@ -56,6 +60,7 @@ export async function GET() {
 
     const closes = data.map(c => parseFloat(String(c[4])));
     const volumes = data.map(c => parseFloat(String(c[5])));
+    const currentPrice = closes[closes.length - 1];
 
     const exec = executionTimingModel({
       probability,
@@ -80,12 +85,49 @@ export async function GET() {
       confidence = "LOW";
     }
 
+    // Target price analysis
+    let targetAnalysis = null;
+    if (targetPrice && currentPrice) {
+      const distance = targetPrice - currentPrice;
+      const distancePercent = (distance / currentPrice) * 100;
+      const isAbove = targetPrice > currentPrice;
+      
+      // Calculate historical volatility to estimate probability of reaching target
+      const returns = [];
+      for (let i = 1; i < closes.length; i++) {
+        returns.push((closes[i] - closes[i-1]) / closes[i-1]);
+      }
+      const meanReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
+      const stdReturn = Math.sqrt(returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / returns.length);
+      
+      // Map time window to number of periods (1m candles)
+      const periods = timeWindow === "5M" ? 5 : timeWindow === "15M" ? 15 : 60;
+      
+      // Calculate probability using geometric Brownian motion approximation
+      const drift = meanReturn * periods;
+      const diffusion = stdReturn * Math.sqrt(periods);
+      const zScore = (distancePercent - drift) / diffusion;
+      const targetProbability = 1 - sigmoid(-zScore); // Probability of reaching target
+      
+      targetAnalysis = {
+        targetPrice,
+        currentPrice,
+        distance: distance.toFixed(2),
+        distancePercent: distancePercent.toFixed(2),
+        direction: isAbove ? "ABOVE" : "BELOW",
+        probability: Math.max(0, Math.min(100, +(targetProbability * 100).toFixed(2))),
+        timeWindow,
+        volatility: +(stdReturn * 100).toFixed(2)
+      };
+    }
+
     return Response.json({
       probability: +(probability * 100).toFixed(2),
       decision,
       confidence,
       execution: exec,
-      signals
+      signals,
+      targetAnalysis
     });
 
   } catch {

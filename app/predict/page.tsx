@@ -11,11 +11,25 @@ export default function PredictPage() {
     probability: number;
     decision: string;
     confidence: string;
+    targetAnalysis?: {
+      targetPrice: number;
+      currentPrice: number;
+      distance: string;
+      distancePercent: string;
+      direction: string;
+      probability: number;
+      timeWindow: string;
+      volatility: number;
+    };
   }>(null);
 
   const runPrediction = async () => {
     try {
-      const res = await fetch("/api/signal");
+      const res = await fetch("/api/signal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetPrice, timeWindow }),
+      });
       const data = await res.json();
       setPrediction(data);
     } catch (err) {
@@ -104,6 +118,45 @@ export default function PredictPage() {
             <div className="text-sm text-[#4a7a96]">
               Confidence: {prediction.confidence}
             </div>
+            {prediction.targetAnalysis && (
+              <div className="mt-4 pt-4 border-t border-[#1a2a35] space-y-2">
+                <div className="text-[10px] text-[#4a7a96] tracking-widest">TARGET ANALYSIS</div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <div className="text-[#4a7a96] text-[10px]">TARGET</div>
+                    <div className="text-[#e0f0f8]">${prediction.targetAnalysis.targetPrice}</div>
+                  </div>
+                  <div>
+                    <div className="text-[#4a7a96] text-[10px]">CURRENT</div>
+                    <div className="text-[#e0f0f8]">${prediction.targetAnalysis.currentPrice}</div>
+                  </div>
+                  <div>
+                    <div className="text-[#4a7a96] text-[10px]">DIRECTION</div>
+                    <div className={`font-bold ${prediction.targetAnalysis.direction === 'ABOVE' ? 'text-green-400' : 'text-red-400'}`}>
+                      {prediction.targetAnalysis.direction}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[#4a7a96] text-[10px]">DISTANCE</div>
+                    <div className="text-[#e0f0f8]">{prediction.targetAnalysis.distancePercent}%</div>
+                  </div>
+                  <div>
+                    <div className="text-[#4a7a96] text-[10px]">WINDOW</div>
+                    <div className="text-[#e0f0f8]">{prediction.targetAnalysis.timeWindow}</div>
+                  </div>
+                  <div>
+                    <div className="text-[#4a7a96] text-[10px]">VOLATILITY</div>
+                    <div className="text-[#e0f0f8]">{prediction.targetAnalysis.volatility}%</div>
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <div className="text-[#4a7a96] text-[10px]">P(HIT TARGET)</div>
+                  <div className="text-2xl font-bold text-[#00ffe7]">
+                    {prediction.targetAnalysis.probability}%
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
