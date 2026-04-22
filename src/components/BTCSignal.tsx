@@ -12,6 +12,9 @@ export default function BTCSignal() {
           <h2>{signal.decision}</h2>
           <p>Probability: {signal.probability}%</p>
           <p>Confidence: {signal.confidence}</p>
+
+          <h3>{signal.execution.timing}</h3>
+          <p>Entry: {signal.execution.entry ? "YES" : "NO"}</p>
         </div>
       )}
     </div>
