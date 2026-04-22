@@ -1,6 +1,3 @@
-// /src/hooks/useSignalEngine.ts — FIXED
-// Recompute now triggers on every price update, not just candle close
-// Candle threshold aligned to 55 (matching indicators.ts fix)
 'use client';
 import { useCallback, useEffect } from 'react';
 import { usePriceStore } from '@/stores/priceStore';
@@ -18,57 +15,39 @@ export function useSignalEngine() {
 
   const recompute = useCallback(() => {
     const state = usePriceStore.getState();
-    const c = state.candles;
-
-    // FIXED: threshold was 50 in hook but 210 in indicators — now both aligned at 55
-    if (c.length < 55) return;
-
-    const signals = computeSignals(c);
-    if (signals.length === 0) return; // don't overwrite with empty array
-
-    const newRegime = detectRegime(c);
+    const candles = state.candles;
+    if (candles.length < 55) return;
+    const signals = computeSignals(candles);
+    if (signals.length === 0) return;
+    const regime = detectRegime(candles);
     const prevRegime = useSignalStore.getState().regime;
-
-    const regimeShift =
-      newRegime.trend !== prevRegime.trend ||
-      newRegime.volatility !== prevRegime.volatility;
-
-    setRegime(newRegime);
-    setRegimeShiftDetected(regimeShift);
+    setRegimeShiftDetected(regime.trend !== prevRegime.trend || regime.volatility !== prevRegime.volatility);
+    setRegime(regime);
     setSignals(signals);
-
-    const ensemble = computeEnsemble(signals, newRegime);
+    const ensemble = computeEnsemble(signals, regime);
     setEnsembleProbability(ensemble);
-
-    const atrRatio = getATRRatio(c);
-    updateComputedFields({
-      ensembleProbability: ensemble,
-      accountBalance,
-      atrRatio,
-    });
+    updateComputedFields({ ensembleProbability: ensemble, accountBalance, atrRatio: getATRRatio(candles) });
   }, [accountBalance, setSignals, setEnsembleProbability, setRegime, setRegimeShiftDetected, updateComputedFields]);
 
-  // FIXED: Also recompute when spotPrice changes (every ticker tick), not only on candle close
-  // This ensures signals update in near-real-time using the latest currentCandle
+  // Recompute on every price tick using live currentCandle
   useEffect(() => {
-    const unsub = usePriceStore.subscribe((state) => {
-      // Inject currentCandle into candles for real-time signal computation
-      if (state.currentCandle && state.candles.length > 0) {
-        // Temporarily merge currentCandle into last position for computation
-        const tempCandles = [...state.candles.slice(0, -1), state.currentCandle];
-        const c = tempCandles;
-        if (c.length < 55) return;
-        const signals = computeSignals(c);
+    const unsub = usePriceStore.subscribe(
+      (state) => state.spotPrice,
+      () => {
+        const state = usePriceStore.getState();
+        if (!state.currentCandle || state.candles.length < 55) return;
+        const merged = [...state.candles.slice(0, -1), state.currentCandle];
+        if (merged.length < 55) return;
+        const signals = computeSignals(merged);
         if (signals.length === 0) return;
-        const newRegime = detectRegime(c);
-        setRegime(newRegime);
+        const regime = detectRegime(merged);
+        setRegime(regime);
         setSignals(signals);
-        const ensemble = computeEnsemble(signals, newRegime);
+        const ensemble = computeEnsemble(signals, regime);
         setEnsembleProbability(ensemble);
-        const atrRatio = getATRRatio(c);
-        updateComputedFields({ ensembleProbability: ensemble, accountBalance, atrRatio });
+        updateComputedFields({ ensembleProbability: ensemble, accountBalance, atrRatio: getATRRatio(merged) });
       }
-    });
+    );
     return unsub;
   }, [accountBalance, setSignals, setEnsembleProbability, setRegime, updateComputedFields]);
 
