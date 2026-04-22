@@ -1,18 +1,29 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { usePriceStore } from '../stores/priceStore';
 import type { Candle } from '../types';
+import { performanceMonitor } from '@/lib/performance';
 
 const COMBINED_WS = 'wss://stream.binance.com:9443/stream?streams=btcusdt@ticker/btcusdt@kline_1m/btcusdt@kline_15m';
 const KRAKEN_WS = 'wss://ws.kraken.com/';
 const KRAKEN_OHLC = 'https://api.kraken.com/0/public/OHLC?pair=XBTUSDT&interval=15';
 
+const MAX_RETRIES = 5;
+const INITIAL_BACKOFF = 1000;
+const MAX_BACKOFF = 30000;
+const HEARTBEAT_INTERVAL = 30000;
+const CONNECTION_TIMEOUT = 10000;
+
 export function useBinanceWebSocket(onCandleClose: () => void) {
   const { setSpotPrice, setCandles, setCurrentCandle, appendCandle, setConnectionStatus, incrementConnectionRetry, resetConnectionRetries, setLastError } = usePriceStore();
   const wsRef = useRef<WebSocket | null>(null);
-  const backoff = useRef(1000);
+  const backoff = useRef(INITIAL_BACKOFF);
   const krakenMode = useRef(false);
   const mounted = useRef(true);
+  const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
+  const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastMessageTime = useRef(Date.now());
+  const connectionAttempts = useRef(0);
 
   async function loadHistory() {
     // Try server proxy first (bypasses geo-restrictions)
@@ -74,27 +85,77 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
     setCandles(candles);
   }
 
+  const startHeartbeat = useCallback(() => {
+    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    
+    heartbeatRef.current = setInterval(() => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        clearInterval(heartbeatRef.current!);
+        return;
+      }
+      
+      const timeSinceLastMessage = Date.now() - lastMessageTime.current;
+      if (timeSinceLastMessage > HEARTBEAT_INTERVAL) {
+        console.warn('WebSocket heartbeat timeout, reconnecting...');
+        wsRef.current.close();
+      }
+    }, HEARTBEAT_INTERVAL / 2);
+  }, []);
+
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+  }, []);
+
   function connectBinance() {
     if (!mounted.current) return;
     setConnectionStatus('reconnecting');
+    connectionAttempts.current++;
+    
     try {
       const ws = new WebSocket(COMBINED_WS);
       wsRef.current = ws;
+      
+      // Connection timeout
+      connectionTimeoutRef.current = setTimeout(() => {
+        if (ws.readyState !== WebSocket.OPEN) {
+          console.warn('WebSocket connection timeout');
+          ws.close();
+        }
+      }, CONNECTION_TIMEOUT);
+      
       ws.onopen = () => {
         if (!mounted.current) { ws.close(); return; }
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+          connectionTimeoutRef.current = null;
+        }
+        
         setConnectionStatus('connected');
-        backoff.current = 1000;
+        backoff.current = INITIAL_BACKOFF;
         resetConnectionRetries();
+        connectionAttempts.current = 0;
+        lastMessageTime.current = Date.now();
+        startHeartbeat();
+        
+        performanceMonitor.recordWebSocketLatency(Date.now() - (lastMessageTime.current - HEARTBEAT_INTERVAL));
       };
+      
       ws.onmessage = (evt) => {
         if (!mounted.current) return;
+        lastMessageTime.current = Date.now();
+        
         try {
           const msg = JSON.parse(evt.data);
           if (!msg?.data || !msg?.stream) return;
+          
           if (msg.stream === 'btcusdt@ticker') {
             const p = parseFloat(msg.data.c);
             if (p > 0) setSpotPrice(p);
           }
+          
           if (msg.stream === 'btcusdt@kline_1m') {
             const k = msg.data.k;
             setCurrentCandle({
@@ -104,6 +165,7 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
               volume: parseFloat(k.v),
             });
           }
+          
           if (msg.stream === 'btcusdt@kline_15m' && msg.data.k?.x) {
             const k = msg.data.k;
             appendCandle({
@@ -116,26 +178,47 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
           }
         } catch { /* malformed message */ }
       };
+      
       ws.onerror = () => {
+        console.error('WebSocket error');
         setConnectionStatus('error');
+        stopHeartbeat();
         ws.close();
       };
+      
       ws.onclose = () => {
         if (!mounted.current) return;
+        stopHeartbeat();
+        
         incrementConnectionRetry();
         const retries = usePriceStore.getState().connectionRetries;
+        
         if (retries >= 3 && !krakenMode.current) {
           krakenMode.current = true;
           setLastError('Binance blocked — switching to Kraken');
           connectKraken();
           return;
         }
-        if (krakenMode.current) return;
+        
+        if (krakenMode.current) {
+          backoff.current = Math.min(backoff.current * 2, MAX_BACKOFF);
+          setTimeout(connectKraken, backoff.current);
+          return;
+        }
+        
+        if (connectionAttempts.current >= MAX_RETRIES) {
+          setLastError('Max retries reached, switching to Kraken');
+          krakenMode.current = true;
+          connectKraken();
+          return;
+        }
+        
         setConnectionStatus('reconnecting');
-        backoff.current = Math.min(backoff.current * 2, 30000);
+        backoff.current = Math.min(backoff.current * 2, MAX_BACKOFF);
         setTimeout(connectBinance, backoff.current);
       };
-    } catch {
+    } catch (error) {
+      console.error('WebSocket connection error:', error);
       setTimeout(connectBinance, 3000);
     }
   }
@@ -143,25 +226,50 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
   function connectKraken() {
     if (!mounted.current) return;
     setConnectionStatus('reconnecting');
+    connectionAttempts.current++;
+    
     try {
       const ws = new WebSocket(KRAKEN_WS);
       wsRef.current = ws;
+      
+      connectionTimeoutRef.current = setTimeout(() => {
+        if (ws.readyState !== WebSocket.OPEN) {
+          console.warn('Kraken WebSocket connection timeout');
+          ws.close();
+        }
+      }, CONNECTION_TIMEOUT);
+      
       ws.onopen = () => {
+        if (!mounted.current) { ws.close(); return; }
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+          connectionTimeoutRef.current = null;
+        }
+        
         setConnectionStatus('connected');
-        backoff.current = 1000;
+        backoff.current = INITIAL_BACKOFF;
         resetConnectionRetries();
+        connectionAttempts.current = 0;
+        lastMessageTime.current = Date.now();
+        startHeartbeat();
+        
         ws.send(JSON.stringify({ event: 'subscribe', pair: ['XBT/USDT'], subscription: { name: 'ticker' } }));
         ws.send(JSON.stringify({ event: 'subscribe', pair: ['XBT/USDT'], subscription: { name: 'ohlc', interval: 15 } }));
       };
+      
       ws.onmessage = (evt) => {
         if (!mounted.current) return;
+        lastMessageTime.current = Date.now();
+        
         try {
           const data = JSON.parse(evt.data);
           if (!Array.isArray(data)) return;
+          
           if (data[2] === 'ticker' && data[1]?.c?.[0]) {
             const p = parseFloat(String(data[1].c[0]));
             if (p > 0) setSpotPrice(p);
           }
+          
           if (typeof data[2] === 'string' && data[2].startsWith('ohlc') && Array.isArray(data[1])) {
             const o = data[1];
             setCurrentCandle({
@@ -173,12 +281,23 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
           }
         } catch { /* ignore */ }
       };
+      
+      ws.onerror = () => {
+        console.error('Kraken WebSocket error');
+        setConnectionStatus('error');
+        stopHeartbeat();
+        ws.close();
+      };
+      
       ws.onclose = () => {
         if (!mounted.current) return;
-        backoff.current = Math.min(backoff.current * 2, 30000);
+        stopHeartbeat();
+        
+        backoff.current = Math.min(backoff.current * 2, MAX_BACKOFF);
         setTimeout(connectKraken, backoff.current);
       };
-    } catch {
+    } catch (error) {
+      console.error('Kraken WebSocket connection error:', error);
       setTimeout(connectKraken, 5000);
     }
   }
@@ -215,12 +334,17 @@ export function useBinanceWebSocket(onCandleClose: () => void) {
     connectBinance();
     const restId = startRestFallback();
     const cgId = startCoinGecko();
+    
     return () => {
       mounted.current = false;
+      stopHeartbeat();
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+      }
       wsRef.current?.close();
       clearInterval(restId);
       clearInterval(cgId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [startHeartbeat, stopHeartbeat]);
 }
