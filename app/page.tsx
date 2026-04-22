@@ -39,8 +39,8 @@ function Panel({ children, className = '' }: { children: React.ReactNode; classN
 }
 
 function Dashboard() {
-  useSignalEngine();
-  useBinanceWebSocket();
+  const { recompute } = useSignalEngine();
+  useBinanceWebSocket(recompute);
 
   return (
     <div className="flex flex-col bg-[#070710] min-h-screen">
