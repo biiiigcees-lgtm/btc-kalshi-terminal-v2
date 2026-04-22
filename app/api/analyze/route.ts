@@ -1,5 +1,10 @@
-// app/api/analyze/route.ts — ELITE SYSTEM PROMPT + DIRECT FETCH
+// app/api/analyze/route.ts — GOD TIER ELITE SYSTEM PROMPT
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { apiCache } from '@/lib/cache';
+import { performanceMonitor } from '@/lib/performance';
+import { AnalyzeRequestSchema } from '@/lib/schemas';
+import { env } from '@/lib/env';
 
 const SYSTEM_PROMPT = `You are an elite quantitative trading advisor specialized exclusively in Kalshi BTC 15-minute binary prediction markets. You have deep expertise in technical analysis, probability theory, and binary options risk management.
 
@@ -105,8 +110,68 @@ ADDITIONAL RULES:
 10. If you detect regime shift → adjust signal weights and mention it explicitly
 11. HIGH CONFIDENCE (≥65%) should ONLY come from: signal agreement, clean structure, strong momentum. Do NOT assign high confidence based on single signals or weak patterns.`;
 
-const rateLimiter = new Map<string, number>();
-const RATE_LIMIT_MS = 5_000;
+// Circuit breaker state
+interface CircuitBreakerState {
+  failures: number;
+  lastFailure: number;
+  isOpen: boolean;
+}
+
+const circuitBreakers = new Map<string, CircuitBreakerState>();
+const CIRCUIT_BREAKER_THRESHOLD = 3;
+const CIRCUIT_BREAKER_TIMEOUT = 60_000; // 1 minute
+
+function checkCircuitBreaker(provider: string): boolean {
+  const state = circuitBreakers.get(provider) || { failures: 0, lastFailure: 0, isOpen: false };
+  
+  if (state.isOpen) {
+    if (Date.now() - state.lastFailure > CIRCUIT_BREAKER_TIMEOUT) {
+      // Reset circuit breaker
+      circuitBreakers.set(provider, { failures: 0, lastFailure: 0, isOpen: false });
+      return true;
+    }
+    return false;
+  }
+  return true;
+}
+
+function recordFailure(provider: string): void {
+  const state = circuitBreakers.get(provider) || { failures: 0, lastFailure: 0, isOpen: false };
+  state.failures++;
+  state.lastFailure = Date.now();
+  
+  if (state.failures >= CIRCUIT_BREAKER_THRESHOLD) {
+    state.isOpen = true;
+  }
+  
+  circuitBreakers.set(provider, state);
+}
+
+function recordSuccess(provider: string): void {
+  circuitBreakers.set(provider, { failures: 0, lastFailure: 0, isOpen: false });
+}
+
+// Smarter rate limiting with burst allowance
+const rateLimiter = new Map<string, { count: number; windowStart: number }>();
+const RATE_LIMIT_WINDOW = 5_000;
+const RATE_LIMIT_MAX_REQUESTS = 3; // Allow 3 requests per 5 seconds
+
+function checkRL(ip: string): boolean {
+  const now = Date.now();
+  const state = rateLimiter.get(ip);
+  
+  if (!state || now - state.windowStart > RATE_LIMIT_WINDOW) {
+    rateLimiter.set(ip, { count: 1, windowStart: now });
+    return true;
+  }
+  
+  if (state.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return false;
+  }
+  
+  state.count++;
+  return true;
+}
 
 function getIP(req: NextRequest): string {
   return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
@@ -114,51 +179,81 @@ function getIP(req: NextRequest): string {
     || 'unknown';
 }
 
-function checkRL(ip: string): boolean {
+// Cleanup old rate limiter entries
+setInterval(() => {
   const now = Date.now();
-  const last = rateLimiter.get(ip);
-  if (last && now - last < RATE_LIMIT_MS) return false;
-  rateLimiter.set(ip, now);
-  if (rateLimiter.size > 500) {
-    for (const [k, v] of Array.from(rateLimiter)) {
-      if (now - v > 120_000) rateLimiter.delete(k);
+  for (const [ip, state] of rateLimiter) {
+    if (now - state.windowStart > RATE_LIMIT_WINDOW * 2) {
+      rateLimiter.delete(ip);
     }
   }
-  return true;
-}
+}, 60_000);
 
 async function callAnthropic(ctx: string): Promise<string> {
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('ANTHROPIC_API_KEY not set');
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1200,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: ctx }],
-    }),
-  });
-  if (!res.ok) throw new Error(`Anthropic ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const d = await res.json();
-  const text = d?.content?.[0]?.text;
-  if (!text) throw new Error('Empty Anthropic response');
-  return text;
+  
+  if (!checkCircuitBreaker('anthropic')) {
+    throw new Error('Anthropic circuit breaker open');
+  }
+  
+  const startTime = Date.now();
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'Connection': 'keep-alive',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1200,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: ctx }],
+      }),
+    });
+    
+    const duration = Date.now() - startTime;
+    performanceMonitor.recordApiCall('anthropic', duration);
+    
+    if (!res.ok) {
+      recordFailure('anthropic');
+      throw new Error(`Anthropic ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    }
+    
+    const d = await res.json();
+    const text = d?.content?.[0]?.text;
+    if (!text) throw new Error('Empty Anthropic response');
+    
+    recordSuccess('anthropic');
+    return text;
+  } catch (error) {
+    recordFailure('anthropic');
+    throw error;
+  }
 }
 
 async function callGroq(ctx: string): Promise<string> {
-  const key = process.env.GROQ_API_KEY;
+  const key = env.GROQ_API_KEY;
   if (!key) throw new Error('GROQ_API_KEY not set');
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
+  
+  if (!checkCircuitBreaker('groq')) {
+    throw new Error('Groq circuit breaker open');
+  }
+  
+  const startTime = Date.now();
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json', 
+        Authorization: `Bearer ${key}`,
+        'Connection': 'keep-alive',
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
       max_tokens: 1200,
       temperature: 0.15,
       messages: [
@@ -166,66 +261,127 @@ async function callGroq(ctx: string): Promise<string> {
         { role: 'user', content: ctx },
       ],
     }),
-  });
-  if (!res.ok) throw new Error(`Groq ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const d = await res.json();
-  const text = d?.choices?.[0]?.message?.content;
-  if (!text) throw new Error('Empty Groq response');
-  return text;
+    });
+    
+    const duration = Date.now() - startTime;
+    performanceMonitor.recordApiCall('groq', duration);
+    
+    if (!res.ok) {
+      recordFailure('groq');
+      throw new Error(`Groq ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    }
+    
+    const d = await res.json();
+    const text = d?.choices?.[0]?.message?.content;
+    if (!text) throw new Error('Empty Groq response');
+    
+    recordSuccess('groq');
+    return text;
+  } catch (error) {
+    recordFailure('groq');
+    throw error;
+  }
+}
+
+// Parallel API call with race for faster responses
+async function callAIWithRace(ctx: string): Promise<{ result: string; provider: string }> {
+  const hasAnthropic = !!env.ANTHROPIC_API_KEY;
+  const hasGroq = !!env.GROQ_API_KEY;
+  
+  if (!hasAnthropic && !hasGroq) {
+    throw new Error('No AI key configured');
+  }
+  
+  const promises: Promise<{ result: string; provider: string }>[] = [];
+  
+  if (hasAnthropic) {
+    promises.push(
+      callAnthropic(ctx).then(result => ({ result, provider: 'anthropic' }))
+    );
+  }
+  
+  if (hasGroq) {
+    promises.push(
+      callGroq(ctx).then(result => ({ result, provider: 'groq' }))
+    );
+  }
+  
+  // Race between available providers
+  return Promise.race(promises);
 }
 
 export async function POST(req: NextRequest) {
+  const startTime = Date.now();
   const ip = getIP(req);
+  
   if (!checkRL(ip)) {
-    return NextResponse.json({ error: 'Rate limit: wait 5 seconds between analyses.' }, { status: 429 });
+    return NextResponse.json({ 
+      error: 'Rate limit: wait 5 seconds between analyses.',
+      retryAfter: 5
+    }, { status: 429 });
   }
 
   let marketContext: string;
   try {
     const body = await req.json();
-    marketContext = body?.marketContext;
-    if (!marketContext || typeof marketContext !== 'string') {
-      return NextResponse.json({ error: 'marketContext required' }, { status: 400 });
+    const validated = AnalyzeRequestSchema.parse(body);
+    marketContext = validated.context;
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ 
+        error: 'Invalid request',
+        details: error.errors
+      }, { status: 400 });
     }
-  } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
-  const hasGroq = !!process.env.GROQ_API_KEY;
+  // Check cache for identical context
+  const cacheKey = `analyze:${Buffer.from(marketContext).toString('base64').slice(0, 32)}`;
+  const cached = apiCache.get(cacheKey);
+  if (cached) {
+    performanceMonitor.recordApiCall('analyze_cache', Date.now() - startTime);
+    return NextResponse.json({ 
+      result: cached,
+      cached: true,
+      provider: 'cache'
+    });
+  }
 
-  const debugInfo = {
-    hasAnthropic,
-    hasGroq,
-    anthropicKeyLength: process.env.ANTHROPIC_API_KEY?.length,
-    groqKeyLength: process.env.GROQ_API_KEY?.length,
-    nodeEnv: process.env.NODE_ENV,
-  };
-
-  console.log('Environment check:', debugInfo);
+  const hasAnthropic = !!env.ANTHROPIC_API_KEY;
+  const hasGroq = !!env.GROQ_API_KEY;
 
   if (!hasAnthropic && !hasGroq) {
     return NextResponse.json({
       error: 'No AI key configured. Add ANTHROPIC_API_KEY or GROQ_API_KEY in Vercel → Settings → Environment Variables, then redeploy.',
-      debug: debugInfo
     }, { status: 500 });
   }
 
   try {
-    if (hasAnthropic) {
-      try {
-        const result = await callAnthropic(marketContext);
-        return NextResponse.json({ result });
-      } catch (e) {
-        console.warn('Anthropic failed, trying Groq:', e);
-        if (!hasGroq) throw e;
-      }
-    }
-    const result = await callGroq(marketContext);
-    return NextResponse.json({ result });
+    const { result, provider } = await callAIWithRace(marketContext);
+    
+    // Cache the result for 30 seconds
+    apiCache.set(cacheKey, result, 30000);
+    
+    const duration = Date.now() - startTime;
+    performanceMonitor.recordApiCall('analyze_total', duration);
+    
+    return NextResponse.json({ 
+      result,
+      provider,
+      duration,
+      cached: false
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('analyze error:', msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    
+    const duration = Date.now() - startTime;
+    performanceMonitor.recordApiCall('analyze_error', duration);
+    
+    return NextResponse.json({ 
+      error: msg,
+      duration
+    }, { status: 500 });
   }
 }
