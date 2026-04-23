@@ -1,5 +1,4 @@
 'use client';
-import dynamic from 'next/dynamic';
 import TopBar from '@/components/TopBar';
 import RiskAlertBanner from '@/components/RiskAlertBanner';
 import CountdownTimer from '@/components/CountdownTimer';
@@ -11,15 +10,6 @@ import AIAdvisor from '@/components/AIAdvisor';
 import TradeLog from '@/components/TradeLog';
 import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket';
 import { useSignalEngine } from '@/hooks/useSignalEngine';
-
-const BTCChart = dynamic(() => import('@/components/BTCChart'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-center justify-center text-[#1e1e2e] text-xs font-mono tracking-widest">
-      LOADING CHART...
-    </div>
-  ),
-});
 
 function Label({ color, text }: { color: string; text: string }) {
   return (
@@ -49,9 +39,6 @@ export default function Dashboard() {
 
       {/* ── MOBILE ── */}
       <div className="lg:hidden flex flex-col gap-2 p-2 pb-10">
-        <Label color="#00ff88" text="SENSORY" />
-        <Panel className="h-[220px]"><BTCChart /></Panel>
-
         <Label color="#ffaa00" text="TEMPORAL" />
         <Panel><CountdownTimer /></Panel>
 
@@ -77,14 +64,8 @@ export default function Dashboard() {
         className="hidden lg:flex flex-col flex-1 overflow-hidden gap-1.5 p-1.5"
         style={{ height: 'calc(100vh - 52px)' }}
       >
-        {/* ROW 1: Chart (dominant) + Countdown + AI */}
+        {/* ROW 1: Countdown + AI */}
         <div className="flex gap-1.5 flex-shrink-0" style={{ height: '42%' }}>
-          {/* Chart — takes most of the width */}
-          <div className="flex flex-col flex-1 min-w-0">
-            <Label color="#00ff88" text="SENSORY — BTC/USDT 15M" />
-            <Panel className="flex-1 min-h-0"><BTCChart /></Panel>
-          </div>
-
           {/* Countdown — narrow column */}
           <div className="flex flex-col flex-shrink-0" style={{ width: '200px' }}>
             <Label color="#ffaa00" text="TEMPORAL" />
@@ -92,7 +73,7 @@ export default function Dashboard() {
           </div>
 
           {/* AI Advisor — key panel, always visible */}
-          <div className="flex flex-col flex-shrink-0" style={{ width: '320px' }}>
+          <div className="flex flex-col flex-1 min-w-0">
             <Label color="#aa44ff" text="AI INTELLIGENCE" />
             <Panel className="flex-1 min-h-0"><AIAdvisor /></Panel>
           </div>
