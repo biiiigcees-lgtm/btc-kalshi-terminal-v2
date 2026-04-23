@@ -45,7 +45,7 @@ export function useSignalEngine() {
         setSignals(signals);
         setRegime(regime);
         setEnsembleProbability(ensemble);
-        updateComputedFields({ ensembleProbability: ensemble, accountBalance, atrRatio });
+        updateComputedFields({ ensembleProbability: ensemble, atrRatio });
         performanceMonitor.recordApiCall('signal_engine_cache', Date.now() - startTime);
         return;
       }
@@ -63,7 +63,7 @@ export function useSignalEngine() {
       setEnsembleProbability(ensemble);
       
       const atrRatio = getATRRatio(candles);
-      updateComputedFields({ ensembleProbability: ensemble, accountBalance, atrRatio });
+      updateComputedFields({ ensembleProbability: ensemble, atrRatio });
       
       // Cache result for 30 seconds
       signalCache.set(cacheKey, { signals, regime, ensemble, atrRatio }, 30000);
@@ -102,7 +102,7 @@ export function useSignalEngine() {
         setEnsembleProbability(ensemble);
         
         const atrRatio = getATRRatio(merged);
-        updateComputedFields({ ensembleProbability: ensemble, accountBalance, atrRatio });
+        updateComputedFields({ ensembleProbability: ensemble, atrRatio });
         
         lastCandleHash.current = candleHash;
         performanceMonitor.recordApiCall('signal_engine_realtime', Date.now() - startTime);

@@ -9,7 +9,7 @@ export default function KalshiMarketPanel() {
   const {
     targetPrice, impliedProbability, edge, expectedValue,
     kellyFraction, fractionalKelly, recommendedBet,
-    volatilityAdjusted, setTargetPrice, setImpliedProbability,
+    volatilityAdjusted, bankroll, setTargetPrice, setImpliedProbability, setBankroll,
   } = useKalshiStore();
   const { terminalSignal } = useTerminalStore();
 
@@ -71,6 +71,18 @@ export default function KalshiMarketPanel() {
       {/* Position sizing */}
       <div className="bg-[#0a0a12] rounded p-2">
         <div className="text-[7px] font-mono text-[#2a2a3a] uppercase tracking-wider mb-1">Position Sizing</div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[7px] font-mono text-[#3a3a50]">Bankroll</span>
+          <input
+            type="number"
+            value={bankroll}
+            onChange={(e) => setBankroll(Number(e.target.value))}
+            title="Bankroll amount"
+            className="flex-1 bg-[#0d0d18] border border-[#141420] rounded px-2 py-0.5 text-[10px] font-mono text-[#e8e8f0]"
+            min={100}
+            step={100}
+          />
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <div className="text-[7px] font-mono text-[#3a3a50]">Kelly</div>

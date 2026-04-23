@@ -1,6 +1,7 @@
 // /src/components/terminal/RecommendationCard.tsx — Main decision display
 'use client';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useState } from 'react';
 import type { TerminalSignal, TerminalDecision } from '@/types';
 
 const DECISION_CONFIG: Record<TerminalDecision, { label: string; color: string; bg: string; icon: string }> = {
@@ -17,6 +18,8 @@ const QUALITY_COLORS: Record<string, string> = {
 };
 
 export default function RecommendationCard({ signal }: { signal: TerminalSignal | null }) {
+  const [explainabilityOpen, setExplainabilityOpen] = useState(false);
+
   if (!signal) {
     return (
       <div className="flex flex-col h-full items-center justify-center gap-3 p-4">
@@ -105,35 +108,54 @@ export default function RecommendationCard({ signal }: { signal: TerminalSignal 
         ))}
       </div>
 
-      {/* Explanation */}
-      <div className="flex-1 overflow-y-auto space-y-2">
-        <div>
-          <div className="text-[7px] font-mono text-[#2a2a3a] uppercase tracking-wider mb-1">Reasoning</div>
-          <div className="text-[10px] font-mono text-[#8888aa] leading-relaxed">
-            {signal.explanation}
-          </div>
-        </div>
+      {/* Collapsible explainability */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        <button
+          onClick={() => setExplainabilityOpen(!explainabilityOpen)}
+          className="flex items-center justify-between text-[7px] font-mono text-[#2a2a3a] uppercase tracking-wider mb-1 hover:text-[#4488ff] transition-colors"
+        >
+          <span>Explainability</span>
+          <span>{explainabilityOpen ? '▼' : '▶'}</span>
+        </button>
+        <AnimatePresence>
+          {explainabilityOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-y-auto space-y-2 flex-1"
+            >
+              <div>
+                <div className="text-[7px] font-mono text-[#2a2a3a] uppercase tracking-wider mb-1">Reasoning</div>
+                <div className="text-[10px] font-mono text-[#8888aa] leading-relaxed">
+                  {signal.explanation}
+                </div>
+              </div>
 
-        <div>
-          <div className="text-[7px] font-mono text-[#2a2a3a] uppercase tracking-wider mb-1">Risk</div>
-          <div className="text-[10px] font-mono text-[#ffaa00] leading-relaxed">
-            {signal.riskNotes}
-          </div>
-        </div>
+              <div>
+                <div className="text-[7px] font-mono text-[#2a2a3a] uppercase tracking-wider mb-1">Risk</div>
+                <div className="text-[10px] font-mono text-[#ffaa00] leading-relaxed">
+                  {signal.riskNotes}
+                </div>
+              </div>
 
-        <div>
-          <div className="text-[7px] font-mono text-[#2a2a3a] uppercase tracking-wider mb-1">Invalidation</div>
-          <div className="text-[10px] font-mono text-[#ff66cc] leading-relaxed">
-            {signal.invalidationConditions}
-          </div>
-        </div>
+              <div>
+                <div className="text-[7px] font-mono text-[#2a2a3a] uppercase tracking-wider mb-1">Invalidation</div>
+                <div className="text-[10px] font-mono text-[#ff66cc] leading-relaxed">
+                  {signal.invalidationConditions}
+                </div>
+              </div>
 
-        <div>
-          <div className="text-[7px] font-mono text-[#2a2a3a] uppercase tracking-wider mb-1">What Would Change</div>
-          <div className="text-[10px] font-mono text-[#4488ff] leading-relaxed">
-            {signal.whatWouldChangeDecision}
-          </div>
-        </div>
+              <div>
+                <div className="text-[7px] font-mono text-[#2a2a3a] uppercase tracking-wider mb-1">What Would Change</div>
+                <div className="text-[10px] font-mono text-[#4488ff] leading-relaxed">
+                  {signal.whatWouldChangeDecision}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Regime badge */}

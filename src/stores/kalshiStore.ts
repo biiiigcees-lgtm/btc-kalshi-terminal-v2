@@ -12,11 +12,12 @@ interface KalshiStore {
   cappedFraction: number;
   recommendedBet: number;
   volatilityAdjusted: boolean;
+  bankroll: number;
   setTargetPrice: (price: number | null) => void;
   setImpliedProbability: (prob: number) => void;
+  setBankroll: (bankroll: number) => void;
   updateComputedFields: (params: {
     ensembleProbability: number;
-    accountBalance: number;
     atrRatio: number;
   }) => void;
 }
@@ -33,20 +34,24 @@ export const useKalshiStore = create<KalshiStore>()(
       cappedFraction: 0,
       recommendedBet: 0,
       volatilityAdjusted: false,
+      bankroll: 1000,
       setTargetPrice: (price) => set({ targetPrice: price }),
       setImpliedProbability: (prob) => set({ impliedProbability: prob }),
-      updateComputedFields: ({ ensembleProbability, accountBalance, atrRatio }) => {
+      setBankroll: (bankroll) => set({ bankroll }),
+      updateComputedFields: ({ ensembleProbability, atrRatio }) => {
         const p = ensembleProbability / 100;
         const implied = get().impliedProbability / 100;
         const edge = (p - implied) * 100;
         const expectedValue = 2 * (p - 0.5) - 0.04;
         const kellyFraction = Math.max(0, 2 * p - 1);
-        let fractionalKelly = kellyFraction * 0.40;
+        // Half-Kelly max (0.5 multiplier)
+        let fractionalKelly = kellyFraction * 0.50;
         let volatilityAdjusted = false;
         if (atrRatio > 1.50) { fractionalKelly *= 0.50; volatilityAdjusted = true; }
         else if (atrRatio > 1.25) { fractionalKelly *= 0.75; volatilityAdjusted = true; }
-        const cappedFraction = Math.min(fractionalKelly, 0.03);
-        const recommendedBet = accountBalance * cappedFraction;
+        // Cap at 5% (0.05)
+        const cappedFraction = Math.min(fractionalKelly, 0.05);
+        const recommendedBet = get().bankroll * cappedFraction;
         set({ edge, expectedValue, kellyFraction, fractionalKelly, cappedFraction, recommendedBet, volatilityAdjusted });
       },
     }),

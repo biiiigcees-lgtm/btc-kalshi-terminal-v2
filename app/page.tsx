@@ -12,6 +12,8 @@ import RecommendationCard from '@/components/terminal/RecommendationCard';
 import KalshiMarketPanel from '@/components/terminal/KalshiMarketPanel';
 import SignalHistory from '@/components/terminal/SignalHistory';
 import SettingsPanel from '@/components/terminal/SettingsPanel';
+import BankrollTracker from '@/components/terminal/BankrollTracker';
+import ToastNotifications from '@/components/terminal/ToastNotifications';
 import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket';
 import { useSignalEngine } from '@/hooks/useSignalEngine';
 import { useTerminalEngine } from '@/hooks/useTerminalEngine';
@@ -54,12 +56,17 @@ export default function Dashboard() {
     <div className="flex flex-col bg-[#050508] min-h-screen text-[#e8e8f0]">
       <RiskAlertBanner />
       <div className="flex-shrink-0"><TopBar /></div>
+      <ToastNotifications />
 
       {/* ── MOBILE ── */}
       <div className="lg:hidden flex flex-col gap-2 p-2 pb-10">
         {/* Decision card */}
         <Label color="#00ff88" text="AI DECISION" />
         <Panel className="h-[280px]"><RecommendationCard signal={terminalSignal} /></Panel>
+
+        {/* Bankroll */}
+        <Label color="#ff66cc" text="BANKROLL" />
+        <Panel><BankrollTracker /></Panel>
 
         {/* Chart */}
         <Label color="#4488ff" text="BTC/USD" />
@@ -167,10 +174,13 @@ export default function Dashboard() {
             </Panel>
           </div>
 
-          {/* Countdown + Settings */}
+          {/* Countdown + Bankroll + Settings */}
           <div className="flex flex-col gap-1.5 flex-shrink-0" style={{ width: '280px' }}>
             <Panel className="flex-shrink-0 overflow-hidden" style={{ height: '50px' }}>
               <CountdownTimer />
+            </Panel>
+            <Panel className="flex-shrink-0 overflow-hidden" style={{ height: '110px' }}>
+              <BankrollTracker />
             </Panel>
             <Panel className="flex-1 min-h-0 overflow-hidden overflow-y-auto">
               <SettingsPanel />

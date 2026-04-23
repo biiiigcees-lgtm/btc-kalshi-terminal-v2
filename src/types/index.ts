@@ -166,6 +166,7 @@ export interface TrajectoryPrediction {
   confidence: number;
   expectedMove: number; // percent
   probability: number;
+  probabilityBand?: { lower: number; upper: number };
   invalidationLevel: number;
 }
 

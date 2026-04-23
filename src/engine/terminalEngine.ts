@@ -278,37 +278,57 @@ export class TerminalEngine {
     const latestPrice = candles[candles.length - 1]?.close ?? 0;
     if (latestPrice === 0) return [];
 
-    const { trendStrength, momentum } = confirmation;
+    const { trendStrength, momentum, volatilityRegime } = confirmation;
     const direction = scored.finalRecommendation === 'BUY_YES' ? 'up'
       : scored.finalRecommendation === 'BUY_NO' ? 'down' : 'sideways';
 
     const baseVol = candles.slice(-20).reduce((s, c) => s + (c.high - c.low), 0) / 20;
     const volPct = baseVol / latestPrice;
 
+    // Momentum/vol scaling for trajectory strength
+    const momentumFactor = Math.abs(momentum) > 0.3 ? 1.5 : Math.abs(momentum) > 0.1 ? 1.2 : 1.0;
+    const volFactor = volatilityRegime > 0.5 ? 1.3 : volatilityRegime > 0.2 ? 1.1 : 1.0;
+
+    const baseProb = direction === 'up' ? scored.bullishScore / 100
+      : direction === 'down' ? scored.bearishScore / 100
+      : scored.neutralScore / 100;
+
     return [
       {
         timeframe: '1m',
         direction,
-        confidence: scored.confidenceScore * 0.9 / 100,
-        expectedMove: volPct * 25,
-        probability: scored.bullishScore / 100,
-        invalidationLevel: latestPrice * (1 - volPct * 50 * (direction === 'up' ? 1 : -1)),
+        confidence: Math.min(0.95, (scored.confidenceScore * 0.9 / 100) * momentumFactor),
+        expectedMove: volPct * 25 * volFactor,
+        probability: baseProb,
+        probabilityBand: {
+          lower: Math.max(0.1, baseProb - 0.15),
+          upper: Math.min(0.9, baseProb + 0.15),
+        },
+        invalidationLevel: latestPrice * (1 - volPct * 50 * volFactor * (direction === 'up' ? 1 : -1)),
       },
       {
         timeframe: '5m',
         direction,
-        confidence: scored.confidenceScore * 0.75 / 100,
-        expectedMove: volPct * 60,
-        probability: scored.bullishScore / 100,
-        invalidationLevel: latestPrice * (1 - volPct * 100 * (direction === 'up' ? 1 : -1)),
+        confidence: Math.min(0.9, (scored.confidenceScore * 0.75 / 100) * momentumFactor),
+        expectedMove: volPct * 60 * volFactor,
+        probability: baseProb * 0.95,
+        probabilityBand: {
+          lower: Math.max(0.1, baseProb * 0.95 - 0.2),
+          upper: Math.min(0.9, baseProb * 0.95 + 0.2),
+        },
+        invalidationLevel: latestPrice * (1 - volPct * 100 * volFactor * (direction === 'up' ? 1 : -1)),
       },
       {
         timeframe: '15m',
         direction,
-        confidence: scored.confidenceScore * 0.6 / 100,
-        expectedMove: volPct * 120,
-        probability: scored.bullishScore / 100,
-        invalidationLevel: latestPrice * (1 - volPct * 200 * (direction === 'up' ? 1 : -1)),
+        confidence: Math.min(0.85, (scored.confidenceScore * 0.6 / 100) * momentumFactor),
+        expectedMove: volPct * 120 * volFactor,
+        probability: baseProb * 0.9,
+        probabilityBand: {
+          lower: Math.max(0.1, baseProb * 0.9 - 0.25),
+          upper: Math.min(0.9, baseProb * 0.9 + 0.25),
+        },
+        invalidationLevel: latestPrice * (1 - volPct * 200 * volFactor * (direction === 'up' ? 1 : -1)),
       },
     ];
   }

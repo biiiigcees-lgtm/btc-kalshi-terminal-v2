@@ -60,6 +60,7 @@ export default function TopBar() {
   const changePositive = change24h.usd >= 0;
 
   const healthColor = feedHealth === 'healthy' ? '#00ff88' : feedHealth === 'degraded' ? '#ffaa00' : '#ff4466';
+  const latencyColor = feedLatency < 100 ? '#00ff88' : feedLatency < 200 ? '#ffaa00' : '#ff4466';
   const regimeColor = terminalSignal ? (REGIME_COLORS[terminalSignal.regime] ?? '#555570') : '#555570';
   const regimeLabel = terminalSignal?.regime?.replace(/([A-Z])/g, ' $1').trim().toUpperCase() ?? regime.trend.toUpperCase();
 
@@ -92,7 +93,7 @@ export default function TopBar() {
         {/* Data health */}
         <span
           className="hidden sm:inline-block px-1.5 py-0.5 rounded text-[8px] font-mono border"
-          style={{ color: healthColor, borderColor: `${healthColor}44`, background: `${healthColor}0d` }}
+          style={{ color: latencyColor, borderColor: `${latencyColor}44`, background: `${latencyColor}0d` }}
         >
           {feedHealth === 'healthy' ? '●' : feedHealth === 'degraded' ? '◐' : '○'} {Math.round(feedLatency)}ms
         </span>
