@@ -17,7 +17,7 @@ export default function BTCChart() {
   const priceLineRef = useRef<any>(null);
   const initializedRef = useRef(false);
 
-  const { candles, currentCandle } = usePriceStore();
+  const { candles, currentCandle, spotPrice } = usePriceStore();
   const { targetPrice } = useKalshiStore();
 
   // Helper function to compute Bollinger Bands
@@ -200,12 +200,19 @@ export default function BTCChart() {
     vwapRef.current?.setData(vwapData);
   }, [candles]);
 
-  // Live candle update
+  // Update chart on every price tick — sub-second refresh
   useEffect(() => {
-    if (!candleSeriesRef.current || !currentCandle) return;
-    // @ts-ignore - lightweight-charts type compatibility
-    candleSeriesRef.current.update(currentCandle);
-  }, [currentCandle]);
+    if (!candleSeriesRef.current || !currentCandle || spotPrice === 0) return;
+    // Merge live price into current candle for real-time bar update
+    const liveCandle = {
+      ...currentCandle,
+      close: spotPrice,
+      high: Math.max(currentCandle.high, spotPrice),
+      low: Math.min(currentCandle.low, spotPrice),
+    };
+    // @ts-expect-error - lightweight-charts type compatibility
+    candleSeriesRef.current.update(liveCandle);
+  }, [spotPrice, currentCandle]);
 
   // Kalshi target price line
   useEffect(() => {
