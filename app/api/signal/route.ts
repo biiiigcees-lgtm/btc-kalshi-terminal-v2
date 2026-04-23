@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { executionTimingModel } from "@/lib/executionModel";
 import { apiCache, priceCache } from "@/lib/cache";
 import { performanceMonitor } from "@/lib/performance";
+import { checkRateLimit, getClientIdentifier } from "@/lib/rateLimiter";
 import { z } from "zod";
 import { SignalRequestSchema, SignalResponseSchema } from "@/lib/schemas";
 
@@ -252,6 +253,59 @@ function calculateTargetAnalysis(
   };
 }
 
+function calculateConfidenceIntervals(
+  closes: number[],
+  probability: number,
+  timeWindow: string
+): { 
+  pointEstimate: number; 
+  lower68: number; 
+  upper68: number; 
+  lower95: number; 
+  upper95: number;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+} {
+  const currentPrice = closes[closes.length - 1];
+  const returns: number[] = [];
+  
+  for (let i = 1; i < closes.length; i++) {
+    returns.push((closes[i] - closes[i - 1]) / closes[i - 1]);
+  }
+  
+  const meanReturn = returns.length > 0 
+    ? returns.reduce((a, b) => a + b, 0) / returns.length 
+    : 0;
+  const variance = returns.length > 0
+    ? returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / returns.length
+    : 0;
+  const stdReturn = Math.sqrt(variance);
+  
+  // Map time window to periods
+  const periodsMap: Record<string, number> = { "5M": 5, "15M": 15, "1H": 60 };
+  const periods = periodsMap[timeWindow] || 15;
+  
+  // Calculate expected return based on probability
+  const expectedReturn = (probability - 0.5) * 2 * stdReturn * Math.sqrt(periods);
+  const pointEstimate = currentPrice * (1 + expectedReturn);
+  
+  // Confidence bands (1σ = 68%, 2σ = 95%)
+  const std68 = stdReturn * Math.sqrt(periods);
+  const std95 = stdReturn * 2 * Math.sqrt(periods);
+  
+  const lower68 = currentPrice * (1 + expectedReturn - std68);
+  const upper68 = currentPrice * (1 + expectedReturn + std68);
+  const lower95 = currentPrice * (1 + expectedReturn - std95);
+  const upper95 = currentPrice * (1 + expectedReturn + std95);
+  
+  // Determine confidence level based on band width
+  const bandWidth = (upper95 - lower95) / currentPrice;
+  let confidence: 'HIGH' | 'MEDIUM' | 'LOW' = 'LOW';
+  if (bandWidth < 0.02) confidence = 'HIGH';
+  else if (bandWidth < 0.05) confidence = 'MEDIUM';
+  
+  return { pointEstimate, lower68, upper68, lower95, upper95, confidence };
+}
+
 function determineDecision(
   probability: number,
   score: number
@@ -278,6 +332,27 @@ function determineDecision(
 
 export async function POST(req: Request): Promise<Response> {
   const startTime = Date.now();
+  
+  // Rate limiting
+  const clientId = getClientIdentifier(req);
+  const rateLimit = checkRateLimit(clientId, 'signal');
+  
+  if (!rateLimit.allowed) {
+    return Response.json(
+      { 
+        error: 'Rate limit exceeded',
+        retryAfter: Math.ceil((rateLimit.resetTime - Date.now()) / 1000)
+      },
+      { 
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': '30',
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': rateLimit.resetTime.toString(),
+        }
+      }
+    );
+  }
   
   try {
     const body = await req.json();
@@ -339,6 +414,9 @@ export async function POST(req: Request): Promise<Response> {
 
     const { decision, confidence } = determineDecision(probability, score);
 
+    // Confidence intervals
+    const confidenceIntervals = calculateConfidenceIntervals(closes, probability, timeWindow);
+
     // Target price analysis
     let targetAnalysis: TargetAnalysis | null = null;
     if (targetPrice && currentPrice) {
@@ -367,8 +445,15 @@ export async function POST(req: Request): Promise<Response> {
     
     return Response.json({
       ...validatedResponse,
+      confidenceIntervals,
       cached: !!cachedCandles,
       duration: totalDuration,
+    }, {
+      headers: {
+        'X-RateLimit-Limit': '30',
+        'X-RateLimit-Remaining': rateLimit.remaining.toString(),
+        'X-RateLimit-Reset': rateLimit.resetTime.toString(),
+      }
     });
   } catch (error) {
     const duration = Date.now() - startTime;

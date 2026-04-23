@@ -179,3 +179,113 @@ export function calculateVWAP(candles: Candle[], anchorIndex?: number): { vwap: 
   
   return { vwap, upperBand, lowerBand };
 }
+
+export function calculateVolumeProfile(candles: Candle[], numBuckets: number = 50): { 
+  poc: number; 
+  vah: number; 
+  val: number; 
+  profile: { price: number; volume: number }[] 
+} {
+  if (candles.length === 0) return { poc: 0, vah: 0, val: 0, profile: [] };
+  
+  const highs = candles.map(c => c.high);
+  const lows = candles.map(c => c.low);
+  const minPrice = Math.min(...lows);
+  const maxPrice = Math.max(...highs);
+  const priceRange = maxPrice - minPrice;
+  
+  if (priceRange === 0) {
+    const avgVol = candles.reduce((sum, c) => sum + c.volume, 0) / candles.length;
+    return { 
+      poc: minPrice, 
+      vah: minPrice, 
+      val: minPrice, 
+      profile: [{ price: minPrice, volume: avgVol }] 
+    };
+  }
+  
+  const bucketSize = priceRange / numBuckets;
+  const buckets: { price: number; volume: number }[] = Array.from({ length: numBuckets }, (_, i) => ({
+    price: minPrice + (i + 0.5) * bucketSize,
+    volume: 0,
+  }));
+  
+  // Distribute volume to buckets
+  for (const candle of candles) {
+    const candleMid = (candle.high + candle.low) / 2;
+    const bucketIndex = Math.min(Math.floor((candleMid - minPrice) / bucketSize), numBuckets - 1);
+    buckets[bucketIndex].volume += candle.volume;
+  }
+  
+  // Find POC (Point of Control) - bucket with max volume
+  const pocBucket = buckets.reduce((max, b) => b.volume > max.volume ? b : max, buckets[0]);
+  const poc = pocBucket.price;
+  
+  // Calculate Value Area (70% of volume)
+  const totalVolume = buckets.reduce((sum, b) => sum + b.volume, 0);
+  const targetVolume = totalVolume * 0.7;
+  
+  let accumulatedVolume = 0;
+  let vah = maxPrice;
+  let val = minPrice;
+  
+  // Start from POC and expand outward
+  let leftIndex = buckets.findIndex(b => b.price === poc);
+  let rightIndex = leftIndex;
+  
+  while (accumulatedVolume < targetVolume && (leftIndex > 0 || rightIndex < numBuckets - 1)) {
+    const leftVol = leftIndex > 0 ? buckets[leftIndex - 1].volume : 0;
+    const rightVol = rightIndex < numBuckets - 1 ? buckets[rightIndex + 1].volume : 0;
+    
+    if (leftVol >= rightVol && leftIndex > 0) {
+      accumulatedVolume += leftVol;
+      leftIndex--;
+      val = buckets[leftIndex].price;
+    } else if (rightIndex < numBuckets - 1) {
+      accumulatedVolume += rightVol;
+      rightIndex++;
+      vah = buckets[rightIndex].price;
+    } else {
+      break;
+    }
+  }
+  
+  return { poc, vah, val, profile: buckets };
+}
+
+export function calculateMultiTimeframeConfluence(
+  signals1m: SignalResult[],
+  signals5m: SignalResult[],
+  signals15m: SignalResult[],
+  signals1h: SignalResult[]
+): { 
+  score: number; 
+  bullishCount: number; 
+  bearishCount: number; 
+  neutralCount: number;
+  confluence: 'STRONG_BULL' | 'BULL' | 'NEUTRAL' | 'BEAR' | 'STRONG_BEAR';
+} {
+  const allSignals = [...signals1m, ...signals5m, ...signals15m, ...signals1h];
+  
+  if (allSignals.length === 0) {
+    return { score: 0, bullishCount: 0, bearishCount: 0, neutralCount: 0, confluence: 'NEUTRAL' };
+  }
+  
+  const bullish = allSignals.filter(s => s.direction === 'bullish').length;
+  const bearish = allSignals.filter(s => s.direction === 'bearish').length;
+  const neutral = allSignals.filter(s => s.direction === 'neutral').length;
+  
+  const total = allSignals.length;
+  const bullishWeight = bullish * 1;
+  const bearishWeight = bearish * -1;
+  const score = (bullishWeight + bearishWeight) / total;
+  
+  let confluence: 'STRONG_BULL' | 'BULL' | 'NEUTRAL' | 'BEAR' | 'STRONG_BEAR' = 'NEUTRAL';
+  
+  if (score > 0.6) confluence = 'STRONG_BULL';
+  else if (score > 0.3) confluence = 'BULL';
+  else if (score < -0.6) confluence = 'STRONG_BEAR';
+  else if (score < -0.3) confluence = 'BEAR';
+  
+  return { score, bullishCount: bullish, bearishCount: bearish, neutralCount: neutral, confluence };
+}
