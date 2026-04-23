@@ -8,125 +8,187 @@ import { useTradeStore } from '../stores/tradeStore';
 import { useKalshiWindow } from '../hooks/useKalshiWindow';
 import { buildContext } from '../utils/contextBuilder';
 
-type MessageRole = 'user' | 'assistant' | 'system';
-interface Message { role: MessageRole; content: string; ts: number; stream?: boolean; }
-
-// Global lock — no concurrent requests ever
-let globalLock = false;
-let globalLastRun = 0;
-const COOLDOWN = 25_000;
-
-export let lastAIDirective: string | null = null;
-export let lastAIAnalysisTime = 0;
-
-function extractDirective(text: string): string | null {
-  const match = text.match(/Direction:\s*(UP|DOWN|NO TRADE)/i);
-  if (match) return match[1];
-  return null;
+interface Thought {
+  id: number;
+  text: string;
+  type: 'thinking' | 'decision' | 'risk' | 'signal' | 'timing' | 'system';
+  ts: number;
+  streaming: boolean;
 }
 
-function StreamingText({ text, onDone }: { text: string; onDone: () => void }) {
-  const [shown, setShown] = useState('');
-  const iRef = useRef(0);
-  const doneRef = useRef(false);
+// Global state to prevent concurrent calls
+let globalLock = false;
+let globalLastRun = 0;
+const MIN_INTERVAL = 90_000; // 90 seconds minimum
 
-  useEffect(() => {
-    iRef.current = 0;
-    setShown('');
-    doneRef.current = false;
-    const id = setInterval(() => {
-      if (iRef.current < text.length) {
-        iRef.current++;
-        setShown(text.slice(0, iRef.current));
-      } else if (!doneRef.current) {
-        doneRef.current = true;
-        clearInterval(id);
-        onDone();
-      }
-    }, 7);
-    return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text]);
+export let lastAIDirective: 'BET UP' | 'BET DOWN' | 'NO TRADE' | null = null;
+export let lastAIAnalysisTime = 0;
+export let lastAIBetSize = 0;
+export let lastAIConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NO EDGE' = 'NO EDGE';
 
-  const lines = shown.split('\n');
-  const isDone = iRef.current >= text.length;
+function classifyLine(line: string): Thought['type'] {
+  if (/BET UP|BET DOWN|NO TRADE/.test(line)) return 'decision';
+  if (/⚠|RISK|WARNING|DANGER|STOP|PAUSE/.test(line)) return 'risk';
+  if (/RSI|MACD|EMA|VWAP|BB|ATR|STOCH|ROC|Z-SCORE|KELTNER|SIGNAL/.test(line)) return 'signal';
+  if (/WINDOW|TIME|MINUTE|SECOND|TIMING|ENTRY/.test(line)) return 'timing';
+  return 'thinking';
+}
+
+function typeColor(type: Thought['type']): string {
+  switch (type) {
+    case 'decision': return '#e8e8f0';
+    case 'risk': return '#ffaa00';
+    case 'signal': return '#4488ff';
+    case 'timing': return '#00ccff';
+    default: return '#555570';
+  }
+}
+
+function DirectivePill({ directive }: { directive: string }) {
+  const cfg = {
+    'BET UP':   { bg: '#00ff8812', border: '#00ff8840', text: '#00ff88', icon: '▲' },
+    'BET DOWN': { bg: '#ff446612', border: '#ff446640', text: '#ff4466', icon: '▼' },
+    'NO TRADE': { bg: '#1a1a2a',   border: '#2a2a3a',   text: '#555570', icon: '—' },
+  }[directive] || { bg: '#1a1a2a', border: '#2a2a3a', text: '#555570', icon: '—' };
 
   return (
-    <div className="space-y-0">
-      {lines.map((line, i) => {
-        const isLast = i === lines.length - 1;
-        if (line.startsWith('═══')) return <div key={i} className="text-[10px] font-mono mt-2 mb-0.5 text-[#4488ff] border-b border-[#1a1a2e] pb-0.5">{line}</div>;
-        if (/^(BET UP|BET DOWN|NO TRADE)$/.test(line.trim())) return null;
-        if (/POSITIVE EV|✓/.test(line)) return <div key={i} className="text-[11px] font-mono text-[#00ff88]">{line}</div>;
-        if (/NEGATIVE EV|✗|REJECT/.test(line)) return <div key={i} className="text-[11px] font-mono text-[#ff4466]">{line}</div>;
-        if (/⚠|WARNING|ALERT|RISK/.test(line)) return <div key={i} className="text-[11px] font-mono text-[#ffaa00]">{line}</div>;
-        if (line.trim() === '') return <div key={i} className="h-1" />;
-        return (
-          <div key={i} className="text-[11px] font-mono text-[#8888aa] leading-relaxed">
-            {line}
-            {!isDone && isLast && (
-              <motion.span animate={{ opacity: [1, 0, 1] }} transition={{ repeat: Infinity, duration: 0.6 }} className="text-[#4488ff]">▋</motion.span>
-            )}
-          </div>
-        );
-      })}
-    </div>
+    <motion.div
+      key={directive}
+      initial={{ scale: 0.9, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+      className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold font-mono tracking-wider"
+      style={{ background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.text }}
+    >
+      <motion.span
+        animate={directive !== 'NO TRADE' ? { opacity: [1, 0.4, 1] } : {}}
+        transition={{ repeat: Infinity, duration: 1.8 }}
+      >{cfg.icon}</motion.span>
+      {directive}
+    </motion.div>
   );
 }
 
-function renderStatic(text: string) {
-  return text.split('\n').map((line, i) => {
-    if (line.startsWith('═══')) return <div key={i} className="text-[10px] font-mono mt-2 mb-0.5 text-[#4488ff] border-b border-[#1a1a2e] pb-0.5">{line}</div>;
-    if (/^(BET UP|BET DOWN|NO TRADE)$/.test(line.trim())) return null;
-    if (/POSITIVE EV|✓/.test(line)) return <div key={i} className="text-[11px] font-mono text-[#00ff88]">{line}</div>;
-    if (/NEGATIVE EV|✗|REJECT/.test(line)) return <div key={i} className="text-[11px] font-mono text-[#ff4466]">{line}</div>;
-    if (/⚠|WARNING|ALERT|RISK/.test(line)) return <div key={i} className="text-[11px] font-mono text-[#ffaa00]">{line}</div>;
-    if (line.trim() === '') return <div key={i} className="h-1" />;
-    return <div key={i} className="text-[11px] font-mono text-[#8888aa] leading-relaxed">{line}</div>;
-  });
+function ThoughtLine({ thought, isNew }: { thought: Thought; isNew: boolean }) {
+  const [shown, setShown] = useState(isNew ? '' : thought.text);
+  const [done, setDone] = useState(!isNew);
+  const idx = useRef(0);
+
+  useEffect(() => {
+    if (!isNew) return;
+    idx.current = 0;
+    setShown('');
+    setDone(false);
+    const id = setInterval(() => {
+      if (idx.current < thought.text.length) {
+        idx.current++;
+        setShown(thought.text.slice(0, idx.current));
+      } else {
+        setDone(true);
+        clearInterval(id);
+      }
+    }, 6);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thought.id]);
+
+  if (thought.text.trim() === '' || thought.text.startsWith('═══')) {
+    return thought.text.startsWith('═══')
+      ? <div className="text-[9px] font-mono text-[#1e1e2e] mt-1.5 mb-0.5 border-t border-[#0d0d18] pt-1">{thought.text}</div>
+      : <div className="h-0.5" />;
+  }
+
+  const color = typeColor(thought.type);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -4 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.15 }}
+      className="flex items-start gap-1.5 py-0.5"
+    >
+      <span className="text-[8px] mt-0.5 flex-shrink-0" style={{ color: `${color}60` }}>
+        {thought.type === 'decision' ? '◈' : thought.type === 'risk' ? '⚠' : thought.type === 'signal' ? '◦' : thought.type === 'timing' ? '⏱' : '·'}
+      </span>
+      <span className="text-[10px] font-mono leading-relaxed flex-1" style={{ color }}>
+        {shown}
+        {!done && isNew && (
+          <motion.span animate={{ opacity: [1, 0, 1] }} transition={{ repeat: Infinity, duration: 0.5 }} style={{ color: '#4488ff' }}>▋</motion.span>
+        )}
+      </span>
+    </motion.div>
+  );
 }
 
 export default function AIAdvisor() {
-  const [messages, setMessages] = useState<Message[]>([{
-    role: 'system',
-    content: 'KALSHI BTC INTELLIGENCE TERMINAL — READY\nAuto-analysis begins in ~10s once signals are live.',
-    ts: Date.now()
+  const [thoughts, setThoughts] = useState<Thought[]>([{
+    id: 0,
+    text: 'Initializing intelligence engine... waiting for live signals.',
+    type: 'system',
+    ts: Date.now(),
+    streaming: false,
   }]);
-  const [loading, setLoading] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
-  const [lastTime, setLastTime] = useState('');
-  const [streamingIdx, setStreamingIdx] = useState<number | null>(null);
+  const [directive, setDirective] = useState<string | null>(null);
+  const [confidence, setConfidence] = useState<string>('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [nextRunIn, setNextRunIn] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const newThoughtIds = useRef<Set<number>>(new Set());
   const { secondsRemaining } = useKalshiWindow();
   const prevSecs = useRef(secondsRemaining);
+  const thoughtCounter = useRef(1);
 
-  // Auto-scroll on every change
+  // Auto-scroll
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [messages, loading]);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [thoughts, isAnalyzing]);
 
-  // Cooldown ticker
+  // Countdown to next analysis
   useEffect(() => {
     const id = setInterval(() => {
-      setCooldown(Math.max(0, Math.ceil((COOLDOWN - (Date.now() - globalLastRun)) / 1000)));
-    }, 500);
+      const left = Math.max(0, Math.ceil((MIN_INTERVAL - (Date.now() - globalLastRun)) / 1000));
+      setNextRunIn(left);
+    }, 1000);
     return () => clearInterval(id);
   }, []);
 
-  const runAnalysis = useCallback(async (trigger = 'manual') => {
+  const addThoughts = useCallback((lines: string[]) => {
+    const newOnes: Thought[] = lines
+      .filter(l => l !== undefined)
+      .map(text => {
+        const id = thoughtCounter.current++;
+        newThoughtIds.current.add(id);
+        return { id, text, type: classifyLine(text), ts: Date.now(), streaming: true };
+      });
+    setThoughts(prev => [...prev.slice(-60), ...newOnes]); // keep last 60 thoughts
+    // Clear streaming flags after animation
+    setTimeout(() => {
+      newThoughtIds.current.clear();
+    }, newOnes.length * 200 + 3000);
+  }, []);
+
+  const runAnalysis = useCallback(async () => {
     if (globalLock) return;
-    if (Date.now() - globalLastRun < COOLDOWN) return;
+    if (Date.now() - globalLastRun < MIN_INTERVAL) return;
+
     const priceS = usePriceStore.getState();
     const signalS = useSignalStore.getState();
     const kalshiS = useKalshiStore.getState();
     const tradeS = useTradeStore.getState();
+
     if (priceS.spotPrice === 0 || signalS.signals.length === 0) return;
 
     globalLock = true;
     globalLastRun = Date.now();
-    setLoading(true);
+    setIsAnalyzing(true);
+
+    // Add "thinking" indicator
+    const thinkId = thoughtCounter.current++;
+    newThoughtIds.current.add(thinkId);
+    setThoughts(prev => [...prev, { id: thinkId, text: `Scanning market at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}...`, type: 'system', ts: Date.now(), streaming: true }]);
 
     try {
       const ctx = buildContext({
@@ -160,119 +222,135 @@ export default function AIAdvisor() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ marketContext: ctx }),
       });
+
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
 
-      const d = extractDirective(data.result);
-      lastAIDirective = d;
-      lastAIAnalysisTime = Date.now();
-      setLastTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      // Parse directive
+      const d = /BET UP/i.test(data.result) ? 'BET UP' : /BET DOWN/i.test(data.result) ? 'BET DOWN' : 'NO TRADE';
+      const conf = /HIGH/i.test(data.result) ? 'HIGH' : /MEDIUM/i.test(data.result) ? 'MEDIUM' : /LOW/i.test(data.result) ? 'LOW' : 'NO EDGE';
 
-      setMessages(prev => {
-        const next = [...prev, { role: 'assistant' as MessageRole, content: data.result, ts: Date.now(), stream: true }];
-        setStreamingIdx(next.length - 1);
-        return next;
-      });
+      lastAIDirective = d as typeof lastAIDirective;
+      lastAIAnalysisTime = Date.now();
+      lastAIConfidence = conf as typeof lastAIConfidence;
+      setDirective(d);
+      setConfidence(conf);
+      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+
+      // Stream thoughts line by line with delays for natural feel
+      const lines = data.result.split('\n').filter((l: string) => l.trim());
+      for (let i = 0; i < lines.length; i++) {
+        const delay = i * 180;
+        setTimeout(() => {
+          const id = thoughtCounter.current++;
+          newThoughtIds.current.add(id);
+          setThoughts(prev => [...prev.slice(-60), {
+            id, text: lines[i], type: classifyLine(lines[i]), ts: Date.now(), streaming: true
+          }]);
+        }, delay);
+      }
+
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setMessages(m => [...m, { role: 'assistant', content: `⚠ ${msg}`, ts: Date.now() }]);
+      addThoughts([`⚠ Analysis error: ${msg}`]);
     } finally {
-      setLoading(false);
+      setIsAnalyzing(false);
       globalLock = false;
     }
-  }, [secondsRemaining]);
+  }, [secondsRemaining, addThoughts]);
 
-  // Startup auto-analyze
+  // Auto-analyze on startup
   useEffect(() => {
-    const t = setTimeout(() => runAnalysis('startup'), 10_000);
+    const t = setTimeout(() => runAnalysis(), 10_000);
     return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Every 2 minutes
+  // Auto-analyze every 90 seconds
   useEffect(() => {
-    const id = setInterval(() => runAnalysis('2min'), 120_000);
+    const id = setInterval(() => runAnalysis(), MIN_INTERVAL);
     return () => clearInterval(id);
   }, [runAnalysis]);
 
-  // When window enters last 3 minutes
+  // Auto-analyze when window enters last 3 minutes
   useEffect(() => {
     if (prevSecs.current > 180 && secondsRemaining <= 180) {
-      runAnalysis('window-3min');
+      runAnalysis();
     }
     prevSecs.current = secondsRemaining;
   }, [secondsRemaining, runAnalysis]);
 
+  const directiveColor = directive === 'BET UP' ? '#00ff88' : directive === 'BET DOWN' ? '#ff4466' : '#555570';
+
   return (
-    <div className="flex flex-col h-full bg-[#07070f]">
+    <div className="flex flex-col h-full bg-[#05050a]">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[#1a1a2a] flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[#0d0d18] flex-shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-[9px] font-mono text-[#444460] uppercase tracking-[0.2em]">AI INTELLIGENCE</span>
+          <span className="text-[8px] font-mono text-[#2a2a3a] uppercase tracking-[0.25em]">INTELLIGENCE</span>
           <AnimatePresence>
-            {loading && (
+            {isAnalyzing && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="flex items-center gap-1">
                 <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                  className="w-2.5 h-2.5 border border-[#4488ff] border-t-transparent rounded-full" />
-                <span className="text-[9px] text-[#4488ff] font-mono">SCANNING</span>
+                  className="w-2 h-2 border border-[#4488ff] border-t-transparent rounded-full" />
+                <span className="text-[8px] text-[#4488ff] font-mono">SCANNING</span>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
         <div className="flex items-center gap-2">
-          {lastTime && <span className="text-[9px] text-[#333350] font-mono">{lastTime}</span>}
-          <button
-            onClick={() => runAnalysis('manual')}
-            disabled={loading || cooldown > 0}
-            className={`px-2 py-0.5 text-[9px] font-mono rounded border transition-all active:scale-95 ${
-              loading || cooldown > 0 ? 'border-[#1a1a2a] text-[#333350] cursor-not-allowed' : 'border-[#4488ff] text-[#4488ff] hover:bg-[#4488ff15]'
-            }`}
-          >
-            {loading ? '⟳' : cooldown > 0 ? `${cooldown}s` : '⚡'}
-          </button>
+          {!isAnalyzing && nextRunIn > 0 && (
+            <span className="text-[8px] font-mono text-[#1e1e2e]">{nextRunIn}s</span>
+          )}
+          {lastUpdated && (
+            <span className="text-[8px] font-mono text-[#2a2a3a]">{lastUpdated}</span>
+          )}
+          {directive && <DirectivePill directive={directive} />}
         </div>
       </div>
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 px-3 py-2 space-y-2">
-        {messages.map((msg, idx) => {
-          const isStreaming = msg.stream && idx === streamingIdx;
-          return (
-            <motion.div key={msg.ts}
-              initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-              {msg.role === 'user' && (
-                <div className="text-[9px] text-[#1e1e2e] font-mono italic">{msg.content}</div>
-              )}
-              {msg.role === 'system' && (
-                <div className="text-[10px] text-[#333350] font-mono space-y-0.5">
-                  {msg.content.split('\n').map((l, i) => <div key={i}>{l}</div>)}
-                </div>
-              )}
-              {msg.role === 'assistant' && (
-                <div>
-                  {isStreaming
-                    ? <StreamingText text={msg.content} onDone={() => setStreamingIdx(null)} />
-                    : renderStatic(msg.content)
-                  }
-                </div>
-              )}
-            </motion.div>
-          );
-        })}
-        {loading && (
-          <motion.div animate={{ opacity: [1, 0.3, 1] }} transition={{ repeat: Infinity, duration: 1.2 }}
-            className="text-[11px] font-mono text-[#4488ff] flex items-center gap-2">
-            <span>◈</span> Processing market intelligence...
+      {/* Confidence strip */}
+      <AnimatePresence>
+        {confidence && confidence !== 'NO EDGE' && (
+          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}
+            className="flex-shrink-0 overflow-hidden border-b border-[#0d0d18]">
+            <div className="px-3 py-1 flex items-center gap-2">
+              <span className="text-[8px] font-mono text-[#2a2a3a]">CONFIDENCE</span>
+              <span className={`text-[9px] font-bold font-mono ${confidence === 'HIGH' ? 'text-[#00ff88]' : confidence === 'MEDIUM' ? 'text-[#ffaa00]' : 'text-[#ff4466]'}`}>
+                {confidence}
+              </span>
+              <span className="text-[8px] font-mono" style={{ color: `${directiveColor}80` }}>
+                {directive === 'BET UP' ? '▲ BULLISH BIAS' : directive === 'BET DOWN' ? '▼ BEARISH BIAS' : '— NEUTRAL'}
+              </span>
+            </div>
           </motion.div>
         )}
-        <div className="h-2" />
+      </AnimatePresence>
+
+      {/* Thought stream */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 px-3 py-2 space-y-0">
+        {thoughts.map((t) => (
+          <ThoughtLine
+            key={t.id}
+            thought={t}
+            isNew={newThoughtIds.current.has(t.id)}
+          />
+        ))}
+        {isAnalyzing && (
+          <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.5 }}
+            className="flex items-center gap-1.5 py-0.5">
+            <span className="text-[8px] text-[#1e1e2e]">·</span>
+            <span className="text-[9px] font-mono text-[#2a2a3a]">processing...</span>
+          </motion.div>
+        )}
+        <div className="h-1" />
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-1 border-t border-[#1a1a2a] flex-shrink-0 flex justify-between">
-        <span className="text-[8px] font-mono text-[#1e1e2e]">NOT FINANCIAL ADVICE</span>
-        <span className="text-[8px] font-mono text-[#1e1e2e]">AUTO · 2MIN · WINDOW −3MIN</span>
+      <div className="px-3 py-1 border-t border-[#0d0d18] flex-shrink-0 flex justify-between items-center">
+        <span className="text-[7px] font-mono text-[#141420]">AUTO · 90S · WINDOW −3MIN</span>
+        <span className="text-[7px] font-mono text-[#141420]">NOT FINANCIAL ADVICE</span>
       </div>
     </div>
   );
