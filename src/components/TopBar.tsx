@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { usePriceStore } from '@/stores/priceStore';
+import BTCLivePrice from './BTCLivePrice';
 
 function fmtPrice(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -53,11 +54,9 @@ export default function TopBar() {
         KALSHI · BTC
       </div>
 
-      {/* Price */}
-      <div className="flex items-baseline gap-2 flex-1 justify-center min-w-0">
-        <span className="text-xl font-bold font-mono text-[#e8e8f0] whitespace-nowrap">
-          ${spotPrice > 0 ? fmtPrice(spotPrice) : '—'}
-        </span>
+      {/* Live Price with smooth updates */}
+      <div className="flex items-center gap-4 flex-1 justify-center min-w-0">
+        <BTCLivePrice />
         <span className={`text-xs font-mono whitespace-nowrap ${changePositive ? 'text-[#00ff88]' : 'text-[#ff4466]'}`}>
           {changePositive ? '+' : ''}{fmtPrice(Math.abs(change24h.usd))} ({changePositive ? '+' : ''}{change24h.pct.toFixed(2)}%)
         </span>

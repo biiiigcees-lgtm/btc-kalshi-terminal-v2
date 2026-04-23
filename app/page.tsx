@@ -49,9 +49,6 @@ export default function Dashboard() {
 
       {/* ── MOBILE ── */}
       <div className="lg:hidden flex flex-col gap-2 p-2 pb-10">
-        <Label color="#00ff88" text="BTC/USD" />
-        <Panel className="h-[220px]"><BTCChart /></Panel>
-
         <Label color="#ffaa00" text="TEMPORAL" />
         <Panel><CountdownTimer /></Panel>
 
@@ -77,22 +74,16 @@ export default function Dashboard() {
         className="hidden lg:flex flex-col flex-1 overflow-hidden gap-1.5 p-1.5"
         style={{ height: 'calc(100vh - 52px)' }}
       >
-        {/* ROW 1: Chart (dominant) + Countdown + AI */}
-        <div className="flex gap-1.5 flex-shrink-0" style={{ height: '45%' }}>
-          {/* Chart — takes most of the width */}
-          <div className="flex flex-col flex-1 min-w-0">
-            <Label color="#00ff88" text="BTC/USD — LIVE" />
-            <Panel className="flex-1 min-h-0"><BTCChart /></Panel>
-          </div>
-
+        {/* ROW 1: Countdown + AI */}
+        <div className="flex gap-1.5 flex-shrink-0" style={{ height: '42%' }}>
           {/* Countdown — narrow column */}
-          <div className="flex flex-col flex-shrink-0" style={{ width: '180px' }}>
+          <div className="flex flex-col flex-shrink-0" style={{ width: '200px' }}>
             <Label color="#ffaa00" text="TEMPORAL" />
             <Panel className="flex-1"><CountdownTimer /></Panel>
           </div>
 
           {/* AI Advisor — key panel, always visible */}
-          <div className="flex flex-col flex-shrink-0" style={{ width: '350px' }}>
+          <div className="flex flex-col flex-1 min-w-0">
             <Label color="#aa44ff" text="AI INTELLIGENCE" />
             <Panel className="flex-1 min-h-0"><AIAdvisor /></Panel>
           </div>
@@ -126,7 +117,7 @@ export default function Dashboard() {
         </div>
 
         {/* ROW 3: Trade log — compact bottom strip */}
-        <div className="flex flex-col flex-shrink-0" style={{ height: '140px' }}>
+        <div className="flex flex-col flex-shrink-0" style={{ height: '160px' }}>
           <Label color="#8888aa" text="MEMORY & LEARNING" />
           <Panel className="flex-1 min-h-0"><TradeLog /></Panel>
         </div>
