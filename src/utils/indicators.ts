@@ -150,3 +150,32 @@ export function getATRRatio(candles: Candle[]): number {
     return avg > 0 ? cur / avg : 1;
   } catch { return 1; }
 }
+
+export function calculateVWAP(candles: Candle[], anchorIndex?: number): { vwap: number; upperBand: number; lowerBand: number } {
+  if (candles.length === 0) return { vwap: 0, upperBand: 0, lowerBand: 0 };
+  
+  const startIndex = anchorIndex ?? 0;
+  const relevantCandles = candles.slice(startIndex);
+  
+  let cumTP = 0, cumVol = 0;
+  for (const c of relevantCandles) {
+    const tp = (c.high + c.low + c.close) / 3;
+    cumTP += tp * c.volume;
+    cumVol += c.volume;
+  }
+  
+  const vwap = cumVol > 0 ? cumTP / cumVol : relevantCandles[relevantCandles.length - 1].close;
+  
+  // Calculate standard deviation for bands
+  const deviations: number[] = [];
+  for (const c of relevantCandles) {
+    const tp = (c.high + c.low + c.close) / 3;
+    deviations.push(Math.abs(tp - vwap));
+  }
+  
+  const avgDev = deviations.length > 0 ? deviations.reduce((a, b) => a + b, 0) / deviations.length : 0;
+  const upperBand = vwap + avgDev;
+  const lowerBand = vwap - avgDev;
+  
+  return { vwap, upperBand, lowerBand };
+}

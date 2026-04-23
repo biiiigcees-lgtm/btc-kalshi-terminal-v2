@@ -1,6 +1,8 @@
 // /app/api/klines/route.ts — Server-side proxy for Binance (bypasses geo-restrictions)
 import { NextResponse } from 'next/server';
 
+export const runtime = 'edge';
+
 const BINANCE_BASE = 'https://api.binance.com/api/v3';
 
 export async function GET(request: Request) {

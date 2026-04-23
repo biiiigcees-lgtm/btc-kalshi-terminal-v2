@@ -6,6 +6,7 @@ import CountdownTimer from '@/components/CountdownTimer';
 import SignalDashboard from '@/components/SignalDashboard';
 import EnsembleGauges from '@/components/EnsembleGauges';
 import PositionSizingPanel from '@/components/PositionSizingPanel';
+import ErrorBoundaryWrapper from '@/components/ErrorBoundaryWrapper';
 import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket';
 import { useSignalEngine } from '@/hooks/useSignalEngine';
 import { PriceSkeleton } from '@/components/LoadingSkeleton';
@@ -71,7 +72,9 @@ function Dashboard() {
         <div>
           <SectionLabel color="#00ff88" label="SENSORY" />
           <Panel className="h-[260px]">
-            <BTCChart />
+            <ErrorBoundaryWrapper>
+              <BTCChart />
+            </ErrorBoundaryWrapper>
           </Panel>
         </div>
 
@@ -79,7 +82,9 @@ function Dashboard() {
         <div>
           <SectionLabel color="#ffaa00" label="TEMPORAL" />
           <Panel>
-            <CountdownTimer />
+            <ErrorBoundaryWrapper>
+              <CountdownTimer />
+            </ErrorBoundaryWrapper>
           </Panel>
         </div>
 
@@ -88,10 +93,14 @@ function Dashboard() {
           <SectionLabel color="#4488ff" label="ANALYSIS" />
           <div className="flex flex-col gap-2">
             <Panel className="h-[340px]">
-              <SignalDashboard />
+              <ErrorBoundaryWrapper>
+                <SignalDashboard />
+              </ErrorBoundaryWrapper>
             </Panel>
             <Panel className="h-[220px]">
-              <EnsembleGauges />
+              <ErrorBoundaryWrapper>
+                <EnsembleGauges />
+              </ErrorBoundaryWrapper>
             </Panel>
           </div>
         </div>
@@ -100,7 +109,9 @@ function Dashboard() {
         <div>
           <SectionLabel color="#ff66cc" label="DECISION" />
           <Panel>
-            <PositionSizingPanel />
+            <ErrorBoundaryWrapper>
+              <PositionSizingPanel />
+            </ErrorBoundaryWrapper>
           </Panel>
         </div>
 
@@ -108,7 +119,9 @@ function Dashboard() {
         <div>
           <SectionLabel color="#aa44ff" label="AI ADVISOR" />
           <Panel className="h-[320px]">
-            <AIAdvisor />
+            <ErrorBoundaryWrapper>
+              <AIAdvisor />
+            </ErrorBoundaryWrapper>
           </Panel>
         </div>
 
@@ -116,7 +129,9 @@ function Dashboard() {
         <div>
           <SectionLabel color="#ff4466" label="EXECUTION" />
           <Panel className="h-[360px]">
-            <PaperTradingPanel />
+            <ErrorBoundaryWrapper>
+              <PaperTradingPanel />
+            </ErrorBoundaryWrapper>
           </Panel>
         </div>
 
@@ -146,13 +161,17 @@ function Dashboard() {
             <div className="flex flex-col gap-1 flex-shrink-0">
               <SectionLabel color="#ffaa00" label="TEMPORAL" />
               <Panel>
-                <CountdownTimer />
+                <ErrorBoundaryWrapper>
+                  <CountdownTimer />
+                </ErrorBoundaryWrapper>
               </Panel>
             </div>
             <div className="flex flex-col gap-1 flex-1 min-h-0">
               <SectionLabel color="#00ff88" label="SENSORY" />
               <Panel className="flex-1 min-h-0">
-                <BTCChart />
+                <ErrorBoundaryWrapper>
+                  <BTCChart />
+                </ErrorBoundaryWrapper>
               </Panel>
             </div>
           </div>
@@ -165,10 +184,14 @@ function Dashboard() {
               <SectionLabel color="#4488ff" label="ANALYSIS" />
               <div className="grid grid-cols-2 gap-2" style={{ height: '240px' }}>
                 <Panel>
-                  <SignalDashboard />
+                  <ErrorBoundaryWrapper>
+                    <SignalDashboard />
+                  </ErrorBoundaryWrapper>
                 </Panel>
                 <Panel>
-                  <EnsembleGauges />
+                  <ErrorBoundaryWrapper>
+                    <EnsembleGauges />
+                  </ErrorBoundaryWrapper>
                 </Panel>
               </div>
             </div>
@@ -177,7 +200,9 @@ function Dashboard() {
             <div className="flex flex-col gap-1 flex-shrink-0">
               <SectionLabel color="#ff66cc" label="DECISION" />
               <Panel>
-                <PositionSizingPanel />
+                <ErrorBoundaryWrapper>
+                  <PositionSizingPanel />
+                </ErrorBoundaryWrapper>
               </Panel>
             </div>
 
@@ -185,7 +210,9 @@ function Dashboard() {
             <div className="flex flex-col gap-1 flex-1 min-h-0">
               <SectionLabel color="#aa44ff" label="AI ADVISOR" />
               <Panel className="flex-1 min-h-0">
-                <AIAdvisor />
+                <ErrorBoundaryWrapper>
+                  <AIAdvisor />
+                </ErrorBoundaryWrapper>
               </Panel>
             </div>
           </div>
@@ -195,7 +222,9 @@ function Dashboard() {
             <div className="flex flex-col gap-1 flex-1 min-h-0">
               <SectionLabel color="#ff4466" label="EXECUTION" />
               <Panel className="flex-1 min-h-0">
-                <PaperTradingPanel />
+                <ErrorBoundaryWrapper>
+                  <PaperTradingPanel />
+                </ErrorBoundaryWrapper>
               </Panel>
             </div>
           </div>
@@ -205,7 +234,9 @@ function Dashboard() {
         <div className="flex flex-col gap-1 px-2 pb-2 flex-shrink-0" style={{ height: '200px' }}>
           <SectionLabel color="#8888aa" label="MEMORY & LEARNING" />
           <Panel className="flex-1 min-h-0">
-            <TradeLog />
+            <ErrorBoundaryWrapper>
+              <TradeLog />
+            </ErrorBoundaryWrapper>
           </Panel>
         </div>
       </div>
