@@ -159,3 +159,18 @@ export interface DecisionEngineConfig {
   enableBackpressure: boolean;
   bufferSize: number;
 }
+
+export interface TrajectoryPrediction {
+  timeframe: '1m' | '5m' | '15m';
+  direction: 'up' | 'down' | 'sideways';
+  confidence: number;
+  expectedMove: number; // percent
+  probability: number;
+  invalidationLevel: number;
+}
+
+export interface EnhancedDecisionSignal extends DecisionSignal {
+  trajectory: TrajectoryPrediction[];
+  edge: number; // edge over random
+  calibrationScore: number; // historical accuracy
+}

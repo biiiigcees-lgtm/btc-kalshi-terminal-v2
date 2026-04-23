@@ -1,91 +1,134 @@
-// src/hooks/useDecisionEngine.ts — Hook to integrate decision engine with existing system
-import { useEffect, useRef } from 'react';
+// src/hooks/useDecisionEngine.ts — Enhanced with trajectory prediction and decision logging
+'use client';
+import { useEffect, useRef, useState } from 'react';
 import { usePriceStore } from '@/stores/priceStore';
 import { useSignalStore } from '@/stores/signalStore';
 import { DecisionEngine } from '@/engine/decisionEngine';
 import { PerformanceTracker } from '@/engine/performanceTracker';
-import type { MarketData, DecisionSignal } from '@/types';
+import { decisionLogger } from '@/lib/decisionLogger';
+import type { EnhancedDecisionSignal } from '@/types';
+
+const DECISION_THRESHOLDS = {
+  minConfidence: 0.65,
+  minEdge: 0.1,
+  maxRiskTier: 3, // 1=low, 2=medium, 3=high, 4=extreme
+  minEnsembleProbability: 60,
+};
 
 export function useDecisionEngine() {
-  const { candles, currentCandle, spotPrice } = usePriceStore();
-  const { 
-    setDecisionSignal, 
-    setPipelineMetrics, 
-    setEngineActive,
-    decisionSignal 
-  } = useSignalStore();
-
+  const { candles, spotPrice, feedHealth } = usePriceStore();
+  const { setDecisionSignal, setPipelineMetrics, setEngineActive } = useSignalStore();
+  
   const engineRef = useRef<DecisionEngine | null>(null);
   const trackerRef = useRef<PerformanceTracker | null>(null);
-  const lastProcessedRef = useRef<number>(0);
-  const processIntervalMs = 5000; // Process every 5 seconds
+  const intervalRef = useRef<number | null>(null);
+  const [lastDecision, setLastDecision] = useState<EnhancedDecisionSignal | null>(null);
+  const [decisionCount, setDecisionCount] = useState(0);
 
+  // Initialize engine and tracker
   useEffect(() => {
-    // Initialize engine and tracker
-    engineRef.current = new DecisionEngine({
-      minConfidenceThreshold: 0.65,
-      maxLatencyMs: 500,
-      minDataQualityScore: 0.7,
-      cooldownMs: 30000,
-      enableBackpressure: true,
-      bufferSize: 100,
-    });
-
-    trackerRef.current = new PerformanceTracker();
-    setEngineActive(true);
+    if (!engineRef.current) {
+      engineRef.current = new DecisionEngine();
+      trackerRef.current = new PerformanceTracker();
+      setEngineActive(true);
+    }
 
     return () => {
-      setEngineActive(false);
-      engineRef.current = null;
-      trackerRef.current = null;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
     };
   }, [setEngineActive]);
 
+  // Process decisions every second
   useEffect(() => {
     if (!engineRef.current || !trackerRef.current) return;
 
-    const now = Date.now();
-    if (now - lastProcessedRef.current < processIntervalMs) return;
-    if (!currentCandle || spotPrice === 0) return;
+    const processDecision = async () => {
+      // Skip if feed is unhealthy
+      if (feedHealth !== 'healthy') {
+        return;
+      }
 
-    lastProcessedRef.current = now;
+      // Skip if insufficient data
+      if (candles.length < 55) {
+        return;
+      }
 
-    // Create market data from current state
-    const marketData: MarketData = {
-      price: spotPrice,
-      volume: currentCandle.volume,
-      spread: 0.0001, // Placeholder - would come from order book
-      timestamp: now,
-      momentum: spotPrice - currentCandle.open,
-      orderFlow: 0, // Placeholder - would come from order book
-      volatility: currentCandle.high - currentCandle.low,
+      try {
+        const signal = await engineRef.current.process(candles);
+        
+        if (signal) {
+          // Apply decision thresholds
+          const meetsThresholds = 
+            signal.confidence >= DECISION_THRESHOLDS.minConfidence &&
+            Math.abs(signal.edge) >= DECISION_THRESHOLDS.minEdge &&
+            signal.riskTier <= DECISION_THRESHOLDS.maxRiskTier;
+
+          if (meetsThresholds) {
+            // Log the decision
+            const logId = decisionLogger.logDecision(signal, spotPrice);
+            
+            // Update store
+            setDecisionSignal(signal);
+            setPipelineMetrics(engineRef.current.getMetrics());
+            setLastDecision(signal);
+            setDecisionCount(prev => prev + 1);
+
+            // Record performance
+            trackerRef.current.recordSignal(signal);
+          }
+        }
+      } catch (error) {
+        console.error('Decision processing error:', error);
+      }
     };
 
-    // Ingest data
-    engineRef.current.ingestData(marketData);
+    // Run immediately
+    processDecision();
 
-    // Process pipeline
-    engineRef.current.process(candles).then((signal: DecisionSignal | null) => {
-      if (signal) {
-        setDecisionSignal(signal);
-        trackerRef.current?.recordSignal(signal);
-        
-        // Update metrics
-        const metrics = engineRef.current?.getMetrics();
-        if (metrics) {
-          setPipelineMetrics(metrics);
-        }
+    // Then run every second
+    intervalRef.current = window.setInterval(processDecision, 1000);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
       }
-    });
-  }, [candles, currentCandle, spotPrice, setDecisionSignal, setPipelineMetrics]);
+    };
+  }, [candles, spotPrice, feedHealth, setDecisionSignal, setPipelineMetrics, setEngineActive]);
+
+  // Manual recompute trigger
+  const recompute = async () => {
+    if (!engineRef.current || candles.length < 55) return null;
+    return await engineRef.current.process(candles);
+  };
+
+  // Record outcome for a decision
+  const recordOutcome = (id: string, outcome: 'win' | 'loss' | 'breakeven', exitPrice: number, notes?: string) => {
+    decisionLogger.updateOutcome(id, outcome, exitPrice, notes);
+    if (trackerRef.current) {
+      trackerRef.current.recordOutcome(outcome === 'win');
+    }
+  };
+
+  // Get decision stats
+  const getDecisionStats = () => {
+    return decisionLogger.getStats();
+  };
+
+  // Get recent decisions
+  const getRecentDecisions = (limit = 10) => {
+    return decisionLogger.getLogs(limit);
+  };
 
   return {
-    decisionSignal,
-    isEngineActive: engineRef.current !== null,
-    recordOutcome: (signalId: string, outcome: 'win' | 'loss', returnPct: number) => {
-      trackerRef.current?.recordOutcome(signalId, outcome, returnPct);
-    },
-    getMetrics: () => engineRef.current?.getMetrics(),
-    getPerformance: (signalType: string) => trackerRef.current?.getMetrics(signalType),
+    recompute,
+    recordOutcome,
+    getDecisionStats,
+    getRecentDecisions,
+    lastDecision,
+    decisionCount,
+    thresholds: DECISION_THRESHOLDS,
   };
 }
+

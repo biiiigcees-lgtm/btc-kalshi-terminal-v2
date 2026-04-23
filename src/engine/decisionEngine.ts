@@ -12,6 +12,8 @@ import type {
   DecisionEngineConfig,
   Candle,
   RegimeType,
+  TrajectoryPrediction,
+  EnhancedDecisionSignal,
 } from '@/types';
 
 // Default configuration
@@ -315,6 +317,59 @@ export class DecisionEngine {
     return scores;
   }
 
+  // Stage 4.5: Generate trajectory predictions
+  generateTrajectoryPredictions(
+    normalized: NormalizedInput,
+    regime: RegimeClassification,
+    ensembleScore: number
+  ): TrajectoryPrediction[] {
+    const predictions: TrajectoryPrediction[] = [];
+    const currentPrice = this.dataBuffer[this.dataBuffer.length - 1]?.price || 0;
+    
+    // Base direction from ensemble
+    const baseDirection = ensembleScore > 0.3 ? 'up' : ensembleScore < -0.3 ? 'down' : 'sideways';
+    const baseConfidence = Math.abs(ensembleScore);
+    
+    // Adjust based on regime
+    const regimeMultiplier = regime.regime === 'trend' ? 1.2 : regime.regime === 'chop' ? 0.6 : 1.0;
+    const volatilityMultiplier = regime.volatilityLevel === 'high' ? 1.5 : regime.volatilityLevel === 'low' ? 0.7 : 1.0;
+    
+    // Expected move calculation based on volatility
+    const baseMove = normalized.volatilityNormalized * 0.5 * volatilityMultiplier;
+    
+    // 1-minute prediction
+    predictions.push({
+      timeframe: '1m',
+      direction: baseDirection,
+      confidence: Math.min(0.95, baseConfidence * 0.8 * regimeMultiplier),
+      expectedMove: baseMove * 0.3,
+      probability: baseConfidence * 0.75,
+      invalidationLevel: currentPrice * (baseDirection === 'up' ? 0.998 : baseDirection === 'down' ? 1.002 : 1),
+    });
+    
+    // 5-minute prediction
+    predictions.push({
+      timeframe: '5m',
+      direction: baseDirection,
+      confidence: Math.min(0.9, baseConfidence * 0.7 * regimeMultiplier),
+      expectedMove: baseMove * 0.6,
+      probability: baseConfidence * 0.65,
+      invalidationLevel: currentPrice * (baseDirection === 'up' ? 0.995 : baseDirection === 'down' ? 1.005 : 1),
+    });
+    
+    // 15-minute prediction
+    predictions.push({
+      timeframe: '15m',
+      direction: baseDirection,
+      confidence: Math.min(0.85, baseConfidence * 0.6 * regimeMultiplier),
+      expectedMove: baseMove * 1.0,
+      probability: baseConfidence * 0.55,
+      invalidationLevel: currentPrice * (baseDirection === 'up' ? 0.99 : baseDirection === 'down' ? 1.01 : 1),
+    });
+    
+    return predictions;
+  }
+
   // Stage 5: Weight ensemble based on regime
   weightEnsemble(scores: ModuleScore[], regime: RegimeClassification): number {
     const weights: Record<RegimeType, Record<string, number>> = {
@@ -470,7 +525,7 @@ export class DecisionEngine {
   }
 
   // Main pipeline: Process data and generate decision signal
-  async process(candles: Candle[]): Promise<DecisionSignal | null> {
+  async process(candles: Candle[]): Promise<EnhancedDecisionSignal | null> {
     const pipelineStart = performance.now();
 
     // Check if processing
@@ -501,8 +556,9 @@ export class DecisionEngine {
       const inferenceStart = performance.now();
       const moduleScores = this.generateModuleScores(normalized, regime);
 
-      // Stage 5: Weight ensemble
+      // Stage 4.5: Generate trajectory predictions
       const ensembleScore = this.weightEnsemble(moduleScores, regime);
+      const trajectory = this.generateTrajectoryPredictions(normalized, regime, ensembleScore);
       this.metrics.inferenceTime = performance.now() - inferenceStart;
 
       // Stage 6: Compute confidence and risk
@@ -543,11 +599,17 @@ export class DecisionEngine {
         ? latestPrice * (1 + 0.002) 
         : latestPrice;
 
+      // Calculate edge (advantage over random)
+      const edge = (confidence - 0.5) * 2; // -1 to 1 range
+
+      // Calculate calibration score (historical accuracy - simplified)
+      const calibrationScore = this.performanceMetrics.get(signalType)?.hitRate || 0.5;
+
       // Generate explanation
       const topModules = moduleScores
         .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
         .slice(0, 3);
-      const explanation = `${regime.regime.toUpperCase()} regime. Top signals: ${topModules.map(m => m.name).join(', ')}. Confidence: ${(confidence * 100).toFixed(0)}%.`;
+      const explanation = `${regime.regime.toUpperCase()} regime. Top signals: ${topModules.map(m => m.name).join(', ')}. Confidence: ${(confidence * 100).toFixed(0)}%. Edge: ${(edge * 100).toFixed(0)}%.`;
 
       // Set cooldown
       this.setCooldown(signalType);
@@ -561,7 +623,7 @@ export class DecisionEngine {
         this.metrics.totalLatency > this.config.maxLatencyMs * 2 ||
         normalized.qualityScore < this.config.minDataQualityScore * 0.5;
 
-      const signal: DecisionSignal = {
+      const signal: EnhancedDecisionSignal = {
         direction,
         confidence,
         signalStrength,
@@ -574,6 +636,9 @@ export class DecisionEngine {
         timestamp: Date.now(),
         positionSizeGuidance: this.calculatePositionSize(confidence, riskTier),
         cooldownRemaining: 0,
+        trajectory,
+        edge,
+        calibrationScore,
       };
 
       this.processing = false;

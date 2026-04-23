@@ -16,7 +16,7 @@ export function useSignalEngine() {
   const { updateComputedFields } = useKalshiStore();
   const { accountBalance } = useTradeStore();
   const throttleRef = useRef<number>(0);
-  const THROTTLE_MS = 1000; // Recompute at most once per second
+  const THROTTLE_MS = 1000; // Recompute exactly once per second for live states
   const lastCandleHash = useRef<string>('');
   const MIN_CANDLE_THRESHOLD = 55;
 

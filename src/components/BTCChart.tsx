@@ -17,7 +17,7 @@ export default function BTCChart() {
   const lastUpdateTimeRef = useRef<number>(0);
   const UPDATE_THROTTLE_MS = 100; // ~10fps for visual updates
 
-  const { candles, currentCandle, spotPrice } = usePriceStore();
+  const { candles, currentCandle, spotPrice, feedHealth, priceFreshness, feedLatency } = usePriceStore();
   const { targetPrice, setTargetPrice } = useKalshiStore();
   
   // Local target price state for input (does not trigger chart rebuild)
@@ -184,18 +184,38 @@ export default function BTCChart() {
 
   return (
     <div className="w-full h-full bg-[#0d0d14] flex flex-col">
-      {/* Header with live price and target input */}
+      {/* Header with live price, feed health, and target input */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#1a1a2e] flex-shrink-0">
         <div className="flex items-center gap-4">
           {/* Current price display */}
           <div className="flex flex-col">
-            <span className="text-[10px] font-mono text-[#3a3a50] uppercase tracking-wider">BTC/USD</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono text-[#3a3a50] uppercase tracking-wider">BTC/USD</span>
+              {/* Feed health badge */}
+              <span className={`text-[7px] font-mono px-1.5 py-0.5 rounded ${
+                feedHealth === 'healthy' ? 'bg-[#00ff88]/20 text-[#00ff88]' :
+                feedHealth === 'degraded' ? 'bg-[#ffaa00]/20 text-[#ffaa00]' :
+                'bg-[#ff4466]/20 text-[#ff4466]'
+              }`}>
+                {feedHealth.toUpperCase()}
+              </span>
+            </div>
             {hasPrice ? (
               <span className="text-lg font-mono font-bold text-[#00ff88]">
                 ${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             ) : (
               <span className="text-sm font-mono text-[#3a3a50]">No data</span>
+            )}
+            {/* Price freshness indicator */}
+            {hasPrice && (
+              <span className={`text-[8px] font-mono ${
+                priceFreshness < 1000 ? 'text-[#00ff88]' :
+                priceFreshness < 3000 ? 'text-[#ffaa00]' :
+                'text-[#ff4466]'
+              }`}>
+                {priceFreshness < 1000 ? '● LIVE' : priceFreshness < 3000 ? '○ STALE' : '◌ DELAYED'}
+              </span>
             )}
           </div>
 
@@ -231,6 +251,20 @@ export default function BTCChart() {
             )}
           </div>
         </div>
+
+        {/* Latency indicator */}
+        {feedLatency > 0 && (
+          <div className="flex items-center gap-1">
+            <span className="text-[8px] font-mono text-[#3a3a50] uppercase tracking-wider">Latency</span>
+            <span className={`text-[10px] font-mono ${
+              feedLatency < 100 ? 'text-[#00ff88]' :
+              feedLatency < 500 ? 'text-[#ffaa00]' :
+              'text-[#ff4466]'
+            }`}>
+              {feedLatency.toFixed(0)}ms
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Chart container */}

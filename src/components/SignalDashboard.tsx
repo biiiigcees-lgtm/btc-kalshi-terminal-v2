@@ -113,7 +113,7 @@ function ConfluenceMeter({ signals }: { signals: SignalResult[] }) {
 }
 
 export default function SignalDashboard() {
-  const { signals, ensembleProbability, lastUpdated, regimeShiftDetected } = useSignalStore();
+  const { signals, ensembleProbability, lastUpdated, regimeShiftDetected, regime } = useSignalStore();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -131,6 +131,14 @@ export default function SignalDashboard() {
     acc[s.category].push(s);
     return acc;
   }, {});
+
+  // Confidence level
+  const confidenceLevel = ensembleProbability >= 75 ? 'HIGH' : ensembleProbability >= 60 ? 'MODERATE' : ensembleProbability >= 45 ? 'LOW' : 'WEAK';
+  const confidenceColor = ensembleProbability >= 75 ? '#00ff88' : ensembleProbability >= 60 ? '#ffaa00' : ensembleProbability >= 45 ? '#ff66cc' : '#555570';
+
+  // Regime label
+  const regimeLabel = regime?.regime === 'trend' ? `TREND ${regime.trendDirection.toUpperCase()}` : regime?.regime === 'chop' ? 'CHOPPY' : 'RANGING';
+  const regimeColor = regime?.regime === 'trend' ? '#00ff88' : regime?.regime === 'chop' ? '#ffaa00' : '#555570';
 
   return (
     <div className="flex flex-col h-full bg-[#05050a]">
@@ -153,6 +161,44 @@ export default function SignalDashboard() {
             </span>
           )}
         </div>
+      </div>
+
+      {/* Confidence and Regime strip */}
+      <div className="flex items-center gap-3 px-3 py-1.5 border-b border-[#0d0d18] flex-shrink-0">
+        {/* Confidence meter */}
+        <div className="flex items-center gap-2 flex-1">
+          <span className="text-[7px] font-mono text-[#2a2a3a] uppercase tracking-wider">CONFIDENCE</span>
+          <div className="flex-1 h-1.5 bg-[#0d0d18] rounded overflow-hidden">
+            <motion.div
+              animate={{ width: `${ensembleProbability}%` }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+              className="h-full rounded"
+              style={{ background: confidenceColor }}
+            />
+          </div>
+          <motion.span
+            key={ensembleProbability}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-[8px] font-bold font-mono w-12 text-right"
+            style={{ color: confidenceColor }}
+          >
+            {ensembleProbability.toFixed(1)}%
+          </motion.span>
+          <span className={`text-[7px] font-mono px-1.5 py-0.5 rounded`} style={{ background: `${confidenceColor}20`, color: confidenceColor }}>
+            {confidenceLevel}
+          </span>
+        </div>
+
+        {/* Regime label */}
+        {regime && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[7px] font-mono text-[#2a2a3a] uppercase tracking-wider">REGIME</span>
+            <span className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded`} style={{ background: `${regimeColor}20`, color: regimeColor }}>
+              {regimeLabel}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Ensemble strip */}
