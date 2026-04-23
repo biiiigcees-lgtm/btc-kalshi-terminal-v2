@@ -7,10 +7,15 @@ import SignalDashboard from '@/components/SignalDashboard';
 import EnsembleGauges from '@/components/EnsembleGauges';
 import PositionSizingPanel from '@/components/PositionSizingPanel';
 import PaperTradingPanel from '@/components/PaperTradingPanel';
-import AIAdvisor from '@/components/AIAdvisor';
 import TradeLog from '@/components/TradeLog';
+import RecommendationCard from '@/components/terminal/RecommendationCard';
+import KalshiMarketPanel from '@/components/terminal/KalshiMarketPanel';
+import SignalHistory from '@/components/terminal/SignalHistory';
+import SettingsPanel from '@/components/terminal/SettingsPanel';
 import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket';
 import { useSignalEngine } from '@/hooks/useSignalEngine';
+import { useTerminalEngine } from '@/hooks/useTerminalEngine';
+import { useTerminalStore } from '@/stores/terminalStore';
 
 const BTCChart = dynamic(() => import('@/components/BTCChart'), {
   ssr: false,
@@ -30,9 +35,9 @@ function Label({ color, text }: { color: string; text: string }) {
   );
 }
 
-function Panel({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+function Panel({ children, className = '', style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
   return (
-    <div className={`bg-[#08080f] border border-[#141420] rounded overflow-hidden ${className}`}>
+    <div className={`bg-[#08080f] border border-[#141420] rounded overflow-hidden ${className}`} style={style}>
       {children}
     </div>
   );
@@ -41,6 +46,9 @@ function Panel({ children, className = '' }: { children: React.ReactNode; classN
 export default function Dashboard() {
   const { recompute } = useSignalEngine();
   useBinanceWebSocket(recompute);
+  useTerminalEngine();
+
+  const { terminalSignal } = useTerminalStore();
 
   return (
     <div className="flex flex-col bg-[#050508] min-h-screen text-[#e8e8f0]">
@@ -49,77 +57,125 @@ export default function Dashboard() {
 
       {/* ── MOBILE ── */}
       <div className="lg:hidden flex flex-col gap-2 p-2 pb-10">
-        <Label color="#ffaa00" text="TEMPORAL" />
-        <Panel><CountdownTimer /></Panel>
+        {/* Decision card */}
+        <Label color="#00ff88" text="AI DECISION" />
+        <Panel className="h-[280px]"><RecommendationCard signal={terminalSignal} /></Panel>
 
-        <Label color="#4488ff" text="ANALYSIS" />
-        <Panel className="h-[320px]"><SignalDashboard /></Panel>
-        <Panel className="h-[200px]"><EnsembleGauges /></Panel>
+        {/* Chart */}
+        <Label color="#4488ff" text="BTC/USD" />
+        <Panel className="h-[200px]"><BTCChart /></Panel>
 
-        <Label color="#aa44ff" text="AI INTELLIGENCE" />
-        <Panel className="h-[400px]"><AIAdvisor /></Panel>
+        {/* Kalshi */}
+        <Label color="#ffaa00" text="KALSHI MARKET" />
+        <Panel className="h-[240px]"><KalshiMarketPanel /></Panel>
 
-        <Label color="#ff66cc" text="DECISION" />
-        <Panel><PositionSizingPanel /></Panel>
+        {/* Signals */}
+        <Label color="#4488ff" text="SIGNALS" />
+        <Panel className="h-[260px]"><SignalDashboard /></Panel>
 
+        {/* Execution */}
         <Label color="#ff4466" text="EXECUTION" />
-        <Panel className="h-[340px]"><PaperTradingPanel /></Panel>
+        <Panel className="h-[300px]"><PaperTradingPanel /></Panel>
 
-        <Label color="#8888aa" text="MEMORY" />
-        <Panel className="h-[380px]"><TradeLog /></Panel>
+        {/* History */}
+        <Label color="#8888aa" text="SIGNAL HISTORY" />
+        <Panel className="h-[200px]"><SignalHistory /></Panel>
+
+        {/* Settings */}
+        <Label color="#555570" text="SETTINGS" />
+        <Panel><SettingsPanel /></Panel>
       </div>
 
-      {/* ── DESKTOP ── */}
+      {/* ── DESKTOP: 3-PANEL TERMINAL ── */}
       <div
-        className="hidden lg:flex flex-col flex-1 overflow-hidden gap-1.5 p-1.5"
+        className="hidden lg:flex flex-col flex-1 overflow-hidden p-1.5 gap-1.5"
         style={{ height: 'calc(100vh - 52px)' }}
       >
-        {/* ROW 1: Countdown + AI */}
-        <div className="flex gap-1.5 flex-shrink-0" style={{ height: '42%' }}>
-          {/* Countdown — narrow column */}
-          <div className="flex flex-col flex-shrink-0" style={{ width: '200px' }}>
-            <Label color="#ffaa00" text="TEMPORAL" />
-            <Panel className="flex-1"><CountdownTimer /></Panel>
+        {/* MAIN ROW: Left (Decision) | Center (Chart) | Right (Kalshi) */}
+        <div className="flex gap-1.5 flex-1 min-h-0">
+
+          {/* LEFT PANEL: Decision + Ensemble */}
+          <div className="flex flex-col gap-1.5 flex-shrink-0" style={{ width: '300px' }}>
+            {/* Decision card - dominant */}
+            <div className="flex flex-col flex-1 min-h-0">
+              <Label color="#00ff88" text="AI DECISION" />
+              <Panel className="flex-1 min-h-0 overflow-hidden">
+                <RecommendationCard signal={terminalSignal} />
+              </Panel>
+            </div>
+            {/* Compact ensemble strip */}
+            <div className="flex flex-col flex-shrink-0" style={{ height: '120px' }}>
+              <Label color="#4488ff" text="ENSEMBLE" />
+              <Panel className="flex-1 min-h-0 overflow-hidden">
+                <EnsembleGauges />
+              </Panel>
+            </div>
           </div>
 
-          {/* AI Advisor — key panel, always visible */}
-          <div className="flex flex-col flex-1 min-w-0">
-            <Label color="#aa44ff" text="AI INTELLIGENCE" />
-            <Panel className="flex-1 min-h-0"><AIAdvisor /></Panel>
+          {/* CENTER PANEL: Chart + Indicators */}
+          <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+            {/* Chart */}
+            <div className="flex flex-col flex-1 min-h-0">
+              <Label color="#4488ff" text="BTC/USD — LIVE" />
+              <Panel className="flex-1 min-h-0">
+                <BTCChart />
+              </Panel>
+            </div>
+            {/* Signal dashboard strip */}
+            <div className="flex flex-col flex-shrink-0" style={{ height: '140px' }}>
+              <Label color="#4488ff" text="INDICATORS" />
+              <Panel className="flex-1 min-h-0 overflow-hidden">
+                <SignalDashboard />
+              </Panel>
+            </div>
+          </div>
+
+          {/* RIGHT PANEL: Kalshi + Position */}
+          <div className="flex flex-col gap-1.5 flex-shrink-0" style={{ width: '280px' }}>
+            {/* Kalshi market */}
+            <div className="flex flex-col flex-1 min-h-0">
+              <Label color="#ffaa00" text="KALSHI MARKET" />
+              <Panel className="flex-1 min-h-0 overflow-hidden">
+                <KalshiMarketPanel />
+              </Panel>
+            </div>
+            {/* Position sizing */}
+            <div className="flex flex-col flex-shrink-0" style={{ height: '180px' }}>
+              <Label color="#ff66cc" text="POSITION" />
+              <Panel className="flex-1 min-h-0 overflow-hidden">
+                <PositionSizingPanel />
+              </Panel>
+            </div>
           </div>
         </div>
 
-        {/* ROW 2: Signals + Gauges + Decision + Execution */}
-        <div className="flex gap-1.5 flex-1 min-h-0 overflow-hidden">
-          {/* Signals */}
-          <div className="flex flex-col min-w-0" style={{ width: '280px', flexShrink: 0 }}>
-            <Label color="#4488ff" text="ANALYSIS" />
-            <Panel className="flex-1 min-h-0"><SignalDashboard /></Panel>
-          </div>
-
-          {/* Gauges */}
-          <div className="flex flex-col flex-shrink-0" style={{ width: '220px' }}>
-            <Label color="#4488ff" text="ENSEMBLE" />
-            <Panel className="flex-1 min-h-0"><EnsembleGauges /></Panel>
-          </div>
-
-          {/* Decision */}
-          <div className="flex flex-col flex-shrink-0" style={{ width: '280px' }}>
-            <Label color="#ff66cc" text="DECISION" />
-            <Panel className="flex-1 min-h-0"><PositionSizingPanel /></Panel>
+        {/* LOWER ROW: History + Execution + Settings */}
+        <div className="flex gap-1.5 flex-shrink-0" style={{ height: '160px' }}>
+          {/* Signal history */}
+          <div className="flex flex-col" style={{ width: '300px' }}>
+            <Label color="#8888aa" text="SIGNAL HISTORY" />
+            <Panel className="flex-1 min-h-0 overflow-hidden">
+              <SignalHistory />
+            </Panel>
           </div>
 
           {/* Execution */}
           <div className="flex flex-col flex-1 min-w-0">
             <Label color="#ff4466" text="EXECUTION" />
-            <Panel className="flex-1 min-h-0"><PaperTradingPanel /></Panel>
+            <Panel className="flex-1 min-h-0 overflow-hidden">
+              <PaperTradingPanel />
+            </Panel>
           </div>
-        </div>
 
-        {/* ROW 3: Trade log — compact bottom strip */}
-        <div className="flex flex-col flex-shrink-0" style={{ height: '160px' }}>
-          <Label color="#8888aa" text="MEMORY & LEARNING" />
-          <Panel className="flex-1 min-h-0"><TradeLog /></Panel>
+          {/* Countdown + Settings */}
+          <div className="flex flex-col gap-1.5 flex-shrink-0" style={{ width: '280px' }}>
+            <Panel className="flex-shrink-0 overflow-hidden" style={{ height: '50px' }}>
+              <CountdownTimer />
+            </Panel>
+            <Panel className="flex-1 min-h-0 overflow-hidden overflow-y-auto">
+              <SettingsPanel />
+            </Panel>
+          </div>
         </div>
       </div>
     </div>

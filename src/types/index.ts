@@ -174,3 +174,56 @@ export interface EnhancedDecisionSignal extends DecisionSignal {
   edge: number; // edge over random
   calibrationScore: number; // historical accuracy
 }
+
+// ── Terminal Decision Types ──────────────────────────────────────────────
+
+export type TerminalDecision = 'BUY_YES' | 'BUY_NO' | 'WAIT' | 'REDUCE_EXPOSURE';
+export type TradeQuality = 'High' | 'Medium' | 'Low';
+export type AggressivenessLevel = 'conservative' | 'moderate' | 'aggressive';
+
+export interface DecisionScoreWeights {
+  trendStrength: number;
+  momentum: number;
+  volatilityRegime: number;
+  marketDisagreement: number;
+  orderBookPressure: number;
+  liquidityQuality: number;
+  reversalRisk: number;
+  confidenceStability: number;
+}
+
+export interface ScoredDecision {
+  bullishScore: number;
+  bearishScore: number;
+  neutralScore: number;
+  finalRecommendation: TerminalDecision;
+  confidenceScore: number; // 0-100
+  tradeQuality: TradeQuality;
+}
+
+export interface TerminalSignal {
+  decision: TerminalDecision;
+  confidence: number; // 0-100
+  tradeQuality: TradeQuality;
+  explanation: string;
+  riskNotes: string;
+  invalidationConditions: string;
+  whatWouldChangeDecision: string;
+  scoredDecision: ScoredDecision;
+  regime: RegimeType;
+  regimeConfidence: number;
+  trajectory: TrajectoryPrediction[];
+  edge: number;
+  calibrationScore: number;
+  timestamp: number;
+  decisionFlipped: boolean; // true if different from previous signal
+  aggressiveness: AggressivenessLevel;
+}
+
+export interface TerminalSettings {
+  aggressiveness: AggressivenessLevel;
+  refreshIntervalMs: number;
+  alertThreshold: number; // confidence threshold for alerts
+  showExplainability: boolean;
+  compactMode: boolean;
+}

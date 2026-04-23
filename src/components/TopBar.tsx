@@ -1,14 +1,27 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { usePriceStore } from '@/stores/priceStore';
+import { useSignalStore } from '@/stores/signalStore';
+import { useTerminalStore } from '@/stores/terminalStore';
 import BTCLivePrice from './BTCLivePrice';
 
 function fmtPrice(n: number) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+const REGIME_COLORS: Record<string, string> = {
+  trend: '#00ff88',
+  chop: '#ffaa00',
+  breakout: '#4488ff',
+  meanReversion: '#aa44ff',
+  highVolatility: '#ff4466',
+  lowLiquidity: '#ff66cc',
+};
+
 export default function TopBar() {
-  const { spotPrice, divergencePct, connectionStatus, connectionRetries, lastError, candles } = usePriceStore();
+  const { spotPrice, divergencePct, connectionStatus, connectionRetries, lastError, candles, feedHealth, feedLatency } = usePriceStore();
+  const { regime } = useSignalStore();
+  const { terminalSignal } = useTerminalStore();
   const [utcTime, setUtcTime] = useState('');
   const [change24h, setChange24h] = useState({ usd: 0, pct: 0 });
   const [showError, setShowError] = useState(false);
@@ -46,6 +59,10 @@ export default function TopBar() {
 
   const changePositive = change24h.usd >= 0;
 
+  const healthColor = feedHealth === 'healthy' ? '#00ff88' : feedHealth === 'degraded' ? '#ffaa00' : '#ff4466';
+  const regimeColor = terminalSignal ? (REGIME_COLORS[terminalSignal.regime] ?? '#555570') : '#555570';
+  const regimeLabel = terminalSignal?.regime?.replace(/([A-Z])/g, ' $1').trim().toUpperCase() ?? regime.trend.toUpperCase();
+
   return (
     <div className="flex items-center justify-between px-4 py-2 border-b border-[#1a1a2a] bg-[#070710] relative z-10 gap-4">
       {/* Title */}
@@ -64,6 +81,22 @@ export default function TopBar() {
 
       {/* Right badges */}
       <div className="flex items-center gap-2 text-xs font-mono flex-shrink-0">
+        {/* Regime badge */}
+        <span
+          className="hidden md:inline-block px-1.5 py-0.5 rounded text-[8px] font-mono font-bold uppercase border"
+          style={{ color: regimeColor, borderColor: `${regimeColor}44`, background: `${regimeColor}0d` }}
+        >
+          {regimeLabel}
+        </span>
+
+        {/* Data health */}
+        <span
+          className="hidden sm:inline-block px-1.5 py-0.5 rounded text-[8px] font-mono border"
+          style={{ color: healthColor, borderColor: `${healthColor}44`, background: `${healthColor}0d` }}
+        >
+          {feedHealth === 'healthy' ? '●' : feedHealth === 'degraded' ? '◐' : '○'} {Math.round(feedLatency)}ms
+        </span>
+
         {divergencePct > 0.2 && (
           <span className="hidden sm:block px-1.5 py-0.5 rounded text-[9px] font-mono bg-[#2a1a00] text-[#ffaa00] border border-[#ffaa00]/30">
             ⚠ {divergencePct.toFixed(2)}%
