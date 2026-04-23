@@ -3,7 +3,7 @@ import type { SignalPerformance, DecisionSignal } from '@/types';
 
 export class PerformanceTracker {
   private performance: Map<string, SignalPerformance> = new Map();
-  private signalHistory: Array<{ signal: DecisionSignal; outcome: 'win' | 'loss' | 'pending'; timestamp: number }> = [];
+  private signalHistory: Array<{ signal: DecisionSignal; outcome: 'win' | 'loss' | 'breakeven' | 'pending'; timestamp: number }> = [];
 
   recordSignal(signal: DecisionSignal): void {
     const key = `${signal.regime}_${signal.direction}`;
@@ -31,11 +31,11 @@ export class PerformanceTracker {
     });
   }
 
-  recordOutcome(signalId: string, outcome: 'win' | 'loss', returnPct: number): void {
+  recordOutcome(signalId: string, outcome: 'win' | 'loss' | 'breakeven', returnPct: number): void {
     const historyEntry = this.signalHistory.find(h => h.signal.timestamp.toString() === signalId);
     if (!historyEntry) return;
 
-    historyEntry.outcome = outcome;
+    historyEntry.outcome = outcome === 'breakeven' ? 'pending' : outcome;
     const key = `${historyEntry.signal.regime}_${historyEntry.signal.direction}`;
     const existing = this.performance.get(key);
 
@@ -70,7 +70,7 @@ export class PerformanceTracker {
     return new Map(this.performance);
   }
 
-  getRecentSignals(limit: number = 10): Array<{ signal: DecisionSignal; outcome: 'win' | 'loss' | 'pending'; timestamp: number }> {
+  getRecentSignals(limit: number = 10): Array<{ signal: DecisionSignal; outcome: 'win' | 'loss' | 'breakeven' | 'pending'; timestamp: number }> {
     return this.signalHistory.slice(-limit);
   }
 

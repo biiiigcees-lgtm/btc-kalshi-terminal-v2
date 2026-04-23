@@ -137,8 +137,8 @@ export default function SignalDashboard() {
   const confidenceColor = ensembleProbability >= 75 ? '#00ff88' : ensembleProbability >= 60 ? '#ffaa00' : ensembleProbability >= 45 ? '#ff66cc' : '#555570';
 
   // Regime label
-  const regimeLabel = regime?.regime === 'trend' ? `TREND ${regime.trendDirection.toUpperCase()}` : regime?.regime === 'chop' ? 'CHOPPY' : 'RANGING';
-  const regimeColor = regime?.regime === 'trend' ? '#00ff88' : regime?.regime === 'chop' ? '#ffaa00' : '#555570';
+  const regimeLabel = regime?.trend === 'up' ? 'TREND UP' : regime?.trend === 'down' ? 'TREND DOWN' : regime?.volatility === 'high' ? 'HIGH VOLATILITY' : 'RANGING';
+  const regimeColor = regime?.trend === 'up' || regime?.trend === 'down' ? '#00ff88' : regime?.volatility === 'high' ? '#ffaa00' : '#555570';
 
   return (
     <div className="flex flex-col h-full bg-[#05050a]">

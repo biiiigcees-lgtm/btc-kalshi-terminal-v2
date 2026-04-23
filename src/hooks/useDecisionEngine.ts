@@ -56,14 +56,16 @@ export function useDecisionEngine() {
       }
 
       try {
+        if (!engineRef.current) return;
         const signal = await engineRef.current.process(candles);
         
         if (signal) {
           // Apply decision thresholds
+          const riskTierValue = signal.riskTier === 'low' ? 1 : signal.riskTier === 'medium' ? 2 : signal.riskTier === 'high' ? 3 : 4;
           const meetsThresholds = 
             signal.confidence >= DECISION_THRESHOLDS.minConfidence &&
             Math.abs(signal.edge) >= DECISION_THRESHOLDS.minEdge &&
-            signal.riskTier <= DECISION_THRESHOLDS.maxRiskTier;
+            riskTierValue <= DECISION_THRESHOLDS.maxRiskTier;
 
           if (meetsThresholds) {
             // Log the decision
@@ -76,7 +78,7 @@ export function useDecisionEngine() {
             setDecisionCount(prev => prev + 1);
 
             // Record performance
-            trackerRef.current.recordSignal(signal);
+            trackerRef.current?.recordSignal(signal);
           }
         }
       } catch (error) {
@@ -107,7 +109,8 @@ export function useDecisionEngine() {
   const recordOutcome = (id: string, outcome: 'win' | 'loss' | 'breakeven', exitPrice: number, notes?: string) => {
     decisionLogger.updateOutcome(id, outcome, exitPrice, notes);
     if (trackerRef.current) {
-      trackerRef.current.recordOutcome(outcome === 'win');
+      const returnPct = ((exitPrice - spotPrice) / spotPrice) * 100;
+      trackerRef.current.recordOutcome(id, outcome, returnPct);
     }
   };
 
