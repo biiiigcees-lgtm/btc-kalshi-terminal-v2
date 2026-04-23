@@ -1,6 +1,6 @@
-// /src/components/BTCChart.tsx
+// /src/components/BTCChart.tsx — Optimized for smooth 60fps rendering
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { usePriceStore } from '../stores/priceStore';
 import { useKalshiStore } from '../stores/kalshiStore';
 
@@ -16,6 +16,12 @@ export default function BTCChart() {
   const vwapRef = useRef<ReturnType<ReturnType<typeof import('lightweight-charts').createChart>['addLineSeries']> | null>(null);
   const priceLineRef = useRef<any>(null);
   const initializedRef = useRef(false);
+  
+  // Optimization: buffered price updates
+  const bufferedPriceRef = useRef<number | null>(null);
+  const rafIdRef = useRef<number | null>(null);
+  const lastUpdateTimeRef = useRef<number>(0);
+  const UPDATE_THROTTLE_MS = 100; // ~10fps for visual updates
 
   const { candles, currentCandle, spotPrice } = usePriceStore();
   const { targetPrice } = useKalshiStore();
@@ -59,6 +65,48 @@ export default function BTCChart() {
     }
     return vwapData;
   };
+
+  // Optimized: requestAnimationFrame-based chart update
+  const flushBufferedUpdate = useCallback(() => {
+    if (!candleSeriesRef.current || !currentCandle || bufferedPriceRef.current === null) return;
+    
+    const liveCandle = {
+      ...currentCandle,
+      close: bufferedPriceRef.current,
+      high: Math.max(currentCandle.high, bufferedPriceRef.current),
+      low: Math.min(currentCandle.low, bufferedPriceRef.current),
+    };
+    
+    // @ts-expect-error - lightweight-charts type compatibility
+    candleSeriesRef.current.update(liveCandle);
+    
+    bufferedPriceRef.current = null;
+    rafIdRef.current = null;
+  }, [currentCandle]);
+
+  // Throttled update scheduler
+  const scheduleUpdate = useCallback((price: number) => {
+    bufferedPriceRef.current = price;
+    
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+    }
+    
+    const now = Date.now();
+    const timeSinceLastUpdate = now - lastUpdateTimeRef.current;
+    
+    if (timeSinceLastUpdate >= UPDATE_THROTTLE_MS) {
+      lastUpdateTimeRef.current = now;
+      rafIdRef.current = requestAnimationFrame(flushBufferedUpdate);
+    } else {
+      // Wait until throttle period
+      const delay = UPDATE_THROTTLE_MS - timeSinceLastUpdate;
+      rafIdRef.current = requestAnimationFrame(() => {
+        lastUpdateTimeRef.current = Date.now();
+        flushBufferedUpdate();
+      });
+    }
+  }, [flushBufferedUpdate]);
 
   // Init chart
   useEffect(() => {
@@ -144,23 +192,41 @@ export default function BTCChart() {
       ema50Ref.current = ema50;
       vwapRef.current = vwap;
 
+      // Debounced resize handler for performance
+      let resizeTimeout: number;
       const ro = new ResizeObserver(() => {
-        if (containerRef.current) {
-          chart.applyOptions({
-            width: containerRef.current.clientWidth,
-            height: containerRef.current.clientHeight,
-          });
-        }
+        clearTimeout(resizeTimeout);
+        resizeTimeout = window.setTimeout(() => {
+          if (containerRef.current && chartRef.current) {
+            chartRef.current.applyOptions({
+              width: containerRef.current.clientWidth,
+              height: containerRef.current.clientHeight,
+            });
+          }
+        }, 100);
       });
       ro.observe(containerRef.current!);
+      
+      // Cleanup on unmount
+      return () => {
+        clearTimeout(resizeTimeout);
+        ro.disconnect();
+        if (rafIdRef.current !== null) {
+          cancelAnimationFrame(rafIdRef.current);
+        }
+      };
     });
   }, []);
 
-  // Load historical candles + compute overlays
+  // Load historical candles + compute overlays (only on initial load or full resync)
   useEffect(() => {
     if (!candleSeriesRef.current || candles.length < 2) return;
 
     const sorted = [...candles].sort((a, b) => a.time - b.time);
+    
+    // Preserve visible range before setData to prevent jumps
+    const visibleRange = chartRef.current?.timeScale().getVisibleRange();
+    
     // @ts-ignore - lightweight-charts type compatibility
     candleSeriesRef.current.setData(sorted);
 
@@ -198,21 +264,21 @@ export default function BTCChart() {
     const vwapData = computeVWAP(sorted);
     // @ts-ignore - lightweight-charts type compatibility
     vwapRef.current?.setData(vwapData);
+    
+    // Restore visible range after setData
+    if (visibleRange && chartRef.current) {
+      chartRef.current.timeScale().setVisibleRange(visibleRange);
+    } else if (chartRef.current) {
+      // Only fit content on first load
+      chartRef.current.timeScale().fitContent();
+    }
   }, [candles]);
 
-  // Update chart on every price tick — sub-second refresh
+  // Optimized: throttled price tick updates via requestAnimationFrame
   useEffect(() => {
-    if (!candleSeriesRef.current || !currentCandle || spotPrice === 0) return;
-    // Merge live price into current candle for real-time bar update
-    const liveCandle = {
-      ...currentCandle,
-      close: spotPrice,
-      high: Math.max(currentCandle.high, spotPrice),
-      low: Math.min(currentCandle.low, spotPrice),
-    };
-    // @ts-expect-error - lightweight-charts type compatibility
-    candleSeriesRef.current.update(liveCandle);
-  }, [spotPrice, currentCandle]);
+    if (spotPrice === 0 || !currentCandle) return;
+    scheduleUpdate(spotPrice);
+  }, [spotPrice, currentCandle, scheduleUpdate]);
 
   // Kalshi target price line
   useEffect(() => {
