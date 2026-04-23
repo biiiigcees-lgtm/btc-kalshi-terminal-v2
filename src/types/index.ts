@@ -68,3 +68,94 @@ export interface RiskAlert {
   color: 'amber' | 'red';
   active: boolean;
 }
+
+// AI Decision Engine Types
+export type RegimeType = 'trend' | 'chop' | 'breakout' | 'meanReversion' | 'highVolatility' | 'lowLiquidity';
+export type RiskTier = 'low' | 'medium' | 'high' | 'extreme';
+export type SignalStrength = 'weak' | 'moderate' | 'strong' | 'extreme';
+
+export interface MarketData {
+  price: number;
+  volume: number;
+  spread: number;
+  timestamp: number;
+  momentum: number;
+  orderFlow: number;
+  volatility: number;
+}
+
+export interface NormalizedInput {
+  priceZScore: number;
+  volumeZScore: number;
+  spreadNormalized: number;
+  momentumNormalized: number;
+  orderFlowNormalized: number;
+  volatilityNormalized: number;
+  qualityScore: number;
+}
+
+export interface ModuleScore {
+  name: string;
+  score: number; // -1 to 1
+  confidence: number;
+  explanation: string;
+}
+
+export interface RegimeClassification {
+  regime: RegimeType;
+  confidence: number;
+  trendDirection: 'up' | 'down' | 'neutral';
+  volatilityLevel: 'low' | 'normal' | 'high' | 'extreme';
+  liquidityLevel: 'low' | 'normal' | 'high';
+}
+
+export interface DecisionSignal {
+  direction: 'bullish' | 'bearish' | 'neutral';
+  confidence: number; // 0 to 1
+  signalStrength: SignalStrength;
+  timeframe: string;
+  regime: RegimeType;
+  invalidationLevel: number;
+  riskScore: number; // 0 to 1
+  riskTier: RiskTier;
+  explanation: string;
+  timestamp: number;
+  positionSizeGuidance?: number;
+  cooldownRemaining: number;
+}
+
+export interface PipelineMetrics {
+  feedTime: number;
+  processingTime: number;
+  inferenceTime: number;
+  renderTime: number;
+  totalLatency: number;
+  dataFreshness: number;
+  backpressureActive: boolean;
+  degradedMode: boolean;
+}
+
+export interface SignalPerformance {
+  hitRate: number;
+  precision: number;
+  recall: number;
+  expectancy: number;
+  totalSignals: number;
+  winningSignals: number;
+  avgReturn: number;
+}
+
+export interface SignalCooldown {
+  signalType: string;
+  lastTriggered: number;
+  cooldownMs: number;
+}
+
+export interface DecisionEngineConfig {
+  minConfidenceThreshold: number;
+  maxLatencyMs: number;
+  minDataQualityScore: number;
+  cooldownMs: number;
+  enableBackpressure: boolean;
+  bufferSize: number;
+}
