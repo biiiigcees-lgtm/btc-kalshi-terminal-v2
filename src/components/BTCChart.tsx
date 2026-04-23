@@ -1,6 +1,6 @@
-// /src/components/BTCChart.tsx — Optimized for smooth 60fps rendering
+// /src/components/BTCChart.tsx — Optimized for smooth 60fps rendering with live price display
 'use client';
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { usePriceStore } from '../stores/priceStore';
 import { useKalshiStore } from '../stores/kalshiStore';
 
@@ -24,7 +24,10 @@ export default function BTCChart() {
   const UPDATE_THROTTLE_MS = 100; // ~10fps for visual updates
 
   const { candles, currentCandle, spotPrice } = usePriceStore();
-  const { targetPrice } = useKalshiStore();
+  const { targetPrice, setTargetPrice } = useKalshiStore();
+  
+  // Local target price state for input (does not trigger chart rebuild)
+  const [localTargetPrice, setLocalTargetPrice] = useState<number>(targetPrice || 0);
 
   // Helper function to compute Bollinger Bands
   const computeBollingerBands = (sorted: any[], period: number) => {
@@ -293,14 +296,87 @@ export default function BTCChart() {
           color: '#ffaa00',
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
-          title: 'KALSHI TARGET',
+          title: 'TARGET',
           axisLabelVisible: true,
         });
       }
     });
   }, [targetPrice]);
 
+  // Sync local target price with store when it changes externally
+  useEffect(() => {
+    if (targetPrice && targetPrice !== localTargetPrice) {
+      setLocalTargetPrice(targetPrice);
+    }
+  }, [targetPrice, localTargetPrice]);
+
+  // Calculate distance to target
+  const currentPrice = spotPrice || currentCandle?.close || 0;
+  const hasPrice = currentPrice > 0;
+  const target = localTargetPrice || 0;
+  const absDistance = target > 0 ? target - currentPrice : 0;
+  const pctDistance = currentPrice > 0 ? (absDistance / currentPrice) * 100 : 0;
+  const direction = absDistance > 0 ? 'above' : absDistance < 0 ? 'below' : 'at';
+
+  // Handle target price input change
+  const handleTargetChange = (value: number) => {
+    setLocalTargetPrice(value);
+    setTargetPrice(value);
+  };
+
   return (
-    <div className="w-full h-full bg-[#0d0d14]" ref={containerRef} />
+    <div className="w-full h-full bg-[#0d0d14] flex flex-col">
+      {/* Header with live price and target input */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[#1a1a2e] flex-shrink-0">
+        <div className="flex items-center gap-4">
+          {/* Current price display */}
+          <div className="flex flex-col">
+            <span className="text-[10px] font-mono text-[#3a3a50] uppercase tracking-wider">BTC/USD</span>
+            {hasPrice ? (
+              <span className="text-lg font-mono font-bold text-[#00ff88]">
+                ${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            ) : (
+              <span className="text-sm font-mono text-[#3a3a50]">No data</span>
+            )}
+          </div>
+
+          {/* Target price input */}
+          <div className="flex items-center gap-2">
+            <div className="flex flex-col">
+              <label className="text-[8px] font-mono text-[#3a3a50] uppercase tracking-wider">Target</label>
+              <input
+                type="number"
+                value={localTargetPrice || ''}
+                onChange={(e) => handleTargetChange(parseFloat(e.target.value) || 0)}
+                placeholder="Set target"
+                className="w-24 bg-[#0a0a12] border border-[#1a1a2e] rounded px-2 py-1 text-[11px] font-mono text-[#ffaa00] focus:outline-none focus:border-[#ffaa00] transition-colors"
+              />
+            </div>
+
+            {/* Distance display */}
+            {target > 0 && hasPrice && (
+              <div className="flex flex-col ml-2">
+                <span className="text-[8px] font-mono text-[#3a3a50] uppercase tracking-wider">Distance</span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] font-mono ${direction === 'above' ? 'text-[#00ff88]' : direction === 'below' ? 'text-[#ff4466]' : 'text-[#555570]'}`}>
+                    {direction === 'above' ? '▲' : direction === 'below' ? '▼' : '—'}
+                  </span>
+                  <span className="text-[11px] font-mono text-[#8888aa]">
+                    ${Math.abs(absDistance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[11px] font-mono text-[#555570]">
+                    ({Math.abs(pctDistance).toFixed(2)}%)
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Chart container */}
+      <div className="flex-1 min-h-0" ref={containerRef} />
+    </div>
   );
 }
